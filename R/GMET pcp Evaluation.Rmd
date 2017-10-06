@@ -1,0 +1,1469 @@
+---
+title: "Evaluation of GMET Precipitation Estimations"
+author: "Navid Ghajarnia (nghajarnia@gmail.com) - Stockholm Environment Institute (US Office-Davis)"
+layout: post
+date: "October 4, 2017"
+output:
+  html_document:
+    number_sections: no
+    theme: readable
+    toc: yes
+  pdf_document:
+    toc: yes
+---
+
+**Purpose:** In this page, we have all the script for evaluation of GMET precipitation dataset against the local observations over Bolivia territory. All different steps are coded from reading the GMET.nc files and preparing the reference time series, to all different statistical and categorical analysis. Each step will come with seperate explanation at the begining and detailed description at each line. It is possible to adjust this script for other gridded precipitation estimation products and other case study regions.  
+
+*Important:* Be sure to do all the following initial setups before running the code...
+
+> **Initial setups**  
+
+make needed adjustments and then excute these lines:
+```{r}
+rm(list=ls()) # removes variables from environment
+dir_main <- "C:/Users/SEI_user/Documents/Bolivia/Calculation/Integrating all codes" # set your main directory
+dir_GMET <- "Z:/Data/NCAR_GMET/GMET_grids/GMET_daily" # set the GMET.nc (netCDF large files) directory
+dir_in <- "C:/Users/SEI_user/Documents/Bolivia/Calculation/Integrating all codes/Inputs" # set the input directory
+```
+
+Now we have set our main, GMET, and our input directory. So, it is time to put some data files into the input directory. Lets move on by the following steps: 
+
+* Copy and paste the "Coordinates_FileXY.csv" file, into your input directory. You can find it [here](https://github.com/seiwater/Gridded-precipitation-validation).  
+* Copy and paste the "pcp txt files" folder into your input directory. You can find it [here](https://github.com/seiwater/Gridded-precipitation-validation)  
+
+*Great!*  
+by executing the following lines, R will organize some sub-folders in your main directory for your convenience!  
+```{r}
+dir.create(paste(dir_main,"/Outputs", sep = ""), showWarnings = FALSE) # 'output' folder is created under the dir_main directory
+dir_out <- paste(dir_main,"/Outputs", sep = "") # set output directory
+dir.create(paste(dir_out,"/Stats", sep = ""), showWarnings = FALSE) # 'Stats' folder is created under the dir_out directory
+dir_stats = paste(dir_out,"/Stats", sep = "") # set Stats directory
+dir.create(paste(dir_out,"/Categorical Eval", sep = ""), showWarnings = FALSE) # 'Categorical Eval' folder is created under the dir_out directory
+dir_cat = paste(dir_out,"/Categorical Eval", sep = "") # set cat directory
+dir.create(paste(dir_out,"/In Pixel Uncertainty", sep = ""), showWarnings = FALSE) # 'In-Pixel Uncertainty' folder is created under the dir_out directory
+dir_unc = paste(dir_out,"/In Pixel Uncertainty", sep = "") # set unc directory
+```
+
+Here, we will install all needed packages (if they are not already installed) and call their library:    
+
+```{r message=FALSE}
+pkg = c("xlsx", "ncdf4", "ggplot2", "maps", "xtable", "knitr", "plotrix", "reshape2", "kableExtra", "magrittr", "sp", "geosphere",  "gridExtra")
+new.pkg = pkg[!(pkg %in% installed.packages())]
+if (length(new.pkg)) {
+    install.packages(new.pkg)
+}
+
+library(xlsx)
+library(ncdf4)
+library(ggplot2)
+library(maps)
+library(knitr)
+library(xtable)
+library(plotrix)
+library(reshape2)
+library(kableExtra)
+library(magrittr)
+library(sp)
+library(geosphere)
+library(gridExtra)
+```
+
+*Wonderful!* We are now all set. Lets enjoy doing the calculations...  
+
+# Section 1: Finding pixels that include Gauge stations
+Please keep in mind that the GMET gridd file is huge and reading data of all its pixels would result in taking a lot of memory. On the other hand, when we don't have gauge observations for those pixels, so ther will be no point in reading them. Therefore, the objective of this section is to find the pixels that include at least one gauge station. Then we can just extract the data and time series of those pixels.  
+```{r eval=FALSE}
+setwd(dir_GMET)
+# ncname <- list.files(pattern = ".nc") # Should you have different .nc files with different names, use this line. 
+ncname <- c("BoliviaGMET_Daily_EnsembleMean.nc") # introduce the name of GMET.nc, if you know it. Otherwise use the previous line
+ncf <- nc_open(ncname)
+lat <- ncvar_get(ncf, "latitude")
+lon <- ncvar_get(ncf, "longitude")
+
+setwd(dir_in)
+Gauge_inf = read.csv("Coordinates_FileXY.csv", header = TRUE)
+
+Pixel_Ga <- as.data.frame(matrix(data = NA, nrow = length(Gauge_inf[,1]), ncol = 7)) # create a matrix to store pixel ID of the pixels that correspond to each Gauge
+colnames(Pixel_Ga) <- c("STNID", "LatG", "LonG", "P_ID1", "P_ID2", "GMET_lat", "GMET_lon") # P_ID1: 1st dimension of lat/lon variables ----- P_ID2: 2nd dimension of lat/lon variables
+Pixel_Ga[,1:3] = Gauge_inf[,1:3]
+
+for (g in 1:length(Gauge_inf[,1])) # loop on the number of gauge stations in Gauge_inf object 
+{
+    v1 <- Gauge_inf[g,2]
+    v2 <- Gauge_inf[g,3]
+    id = which((lat - 0.025) <= v1 & (lat + 0.025) > v1 & (lon - 0.025) <= v2 & (lon + 0.025) > v2)
+    id1 = which((lat - 0.025) <= v1 & (lat + 0.025) > v1 & (lon - 0.025) <= v2 & (lon + 0.025) > v2 , arr.ind=TRUE)[1]
+    id2 = which((lat - 0.025) <= v1 & (lat + 0.025) > v1 & (lon - 0.025) <= v2 & (lon + 0.025) > v2 , arr.ind=TRUE)[2]
+    
+    Pixel_Ga[g,4] <- id1 # 1st dimension of the lat & lon matrices which corresponds to raws and Long
+    Pixel_Ga[g,5] <- id2 # 2nd dimension of the lat & lon matrices which corresponds to columns and Lat
+    if (length(id) == 0) {
+        # in this case, this gauge is out of the window of the produced GMET pixels
+        Pixel_Ga[g,6] = NA
+        Pixel_Ga[g,7] = NA
+    } else {
+        Pixel_Ga[g,6] = lat[id]
+        Pixel_Ga[g,7] = lon[id]
+    }
+}
+
+outG = which(is.na(Pixel_Ga$P_ID1)) # Gauges out of the GMET window
+Pixel_Ga = Pixel_Ga[-outG,] # the gauges at this line are out of the window of GMET pixels and their values returned NA. So these are omitted
+
+#Saving the Pixel_Ga Dataframe
+setwd(dir_out)
+save(Pixel_Ga, file = "Pixel_Ga_LatLon.RData")
+```
+
+Now we want to create a simple map of Bolivia including the location of rain gauge stations in and outside of the country that are used in GMET algorithm.  
+```{r}
+setwd(dir_out)
+load("Pixel_Ga_LatLon.RData")
+map.text("world",c("Bolivia","Brazil","chile","paragu","argen","peru"), xlim = c(-73,-52), ylim = c(-25,-8))
+text(-72,-13,"Peru",cex = 0.8)
+text(-69,-23,"Chile",cex = 0.8)
+text(-64,-24,"Argentina",cex = 0.8)
+points(Pixel_Ga$LonG,Pixel_Ga$LatG,col=4,pch=16,cex = 0.5)
+```
+
+# Section 2: Preparing the GMET time series
+In this section, by having the corresponding pixel dimentions of the available gauge stations, we want to extract the total GMET time series and put them in a matrix. We will do the same for gauge stations and will call that the reference data set.  
+```{r eval=FALSE}
+setwd(dir_GMET)
+# ncname <- list.files(pattern = ".nc")  Should you have different .nc files with different names, use this line.
+ncname <- c("BoliviaGMET_Daily_EnsembleMean.nc") # introduce the name of GMET.nc, if you know it. Otherwise use the previous line.
+setwd(dir_out)
+load("Pixel_Ga_LatLon.RData") # Gauge station's information
+
+GMET_P <- list() 
+list_P <- list()
+for (i in 1:length(ncname)) # currently we have just a single GMET.nc file so this loop is of length one! However if the GMET time series is devided into various '.nc' files due to their volume and storage issues, then this loop will work for all of them. 
+{
+    ncf <- nc_open(ncname[i])
+    GMET_P[[i]] <- ncvar_get(ncf, "time")
+    
+    for(j in 1:nrow(Pixel_Ga))
+    {
+        PID1 = Pixel_Ga[j,4]
+        PID2 = Pixel_Ga[j,5]
+        list_P[[j]] <- ncvar_get(ncf,"pcp", start=c(PID1,PID2,1), count=c(1,1,-1)) 
+        # all precipitation time series of all pixels that have at least one gauge station are read at above line
+        GMET_P[[i]] = cbind(GMET_P[[i]],list_P[[j]]) # each time series is added to GMET_P list in a new column
+    }
+}
+
+GMET_P = as.data.frame(GMET_P)
+
+colnames(GMET_P)[1] <- c("time")
+for(j in 1:nrow(Pixel_Ga))
+{
+    colnames(GMET_P)[1+j] <- c(paste(Pixel_Ga[j,4],",",Pixel_Ga[j,5]))
+}
+
+setwd(dir_out)
+#write.csv(GMET_P, file = "GMET_P_Total_AllGa.csv") # If you want the 'csv' file, you can excute this line
+save(GMET_P, file = "GMET_P_Total_AllGa.RData")
+
+```
+
+# Section 3: Distances between each gauge and its pixel center
+The objective of this section is to find the pixels that include one or more gauge stations. Then, it is needed to calculate the distance between each gauge and the center of its pixel so that later, this distances can be used to calculate the average value of observations at that pixel. Note that we need only one reference dataset for each pixel, to easily compare it with the GMET estimated time series.  
+```{r eval=FALSE}
+setwd(dir_out)
+load("Pixel_Ga_LatLon.RData") # Gauges information
+
+# making a list that can hold combination of values, chr, and matices in different array
+pi_ga = matrix(list(), nrow(Pixel_Ga), ncol(Pixel_Ga))
+pi_ga[,1:length(Pixel_Ga[1,])] = Pixel_Ga[,1:length(Pixel_Ga[1,])]
+
+pi_ga[,1] = as.character(Pixel_Ga[,1]) # if you don't use the as.character, it will change the station names (factors) to their levels (numbers)
+for (i in 2:length(Pixel_Ga[1,]))
+{ # this is done in a loop so that the class of pi_ga is not changed to data.frame
+    pi_ga[,i] = Pixel_Ga[,i]
+}
+
+pi_ga = cbind(pi_ga,paste(pi_ga[,4],pi_ga[,5],sep = ","))
+colnames(pi_ga) = c(colnames(Pixel_Ga),"Pi_Names")
+
+# adding a new column
+pi_ga = cbind(pi_ga,NA)
+
+# finding the pixels including more than one gauge station. the returned values will be saved as matrices (or single values) in pi_ga list
+for (i in 1:length(pi_ga[,8]))
+{
+    pi_ga[[i,9]]= grep(pi_ga[i,8],pi_ga[,8])
+}
+colnames(pi_ga)[9] = c("Ga_in_Pi")
+#################################################################################
+# Calculating the distance of gauge stations with the center of pixels. 
+#################################################################################
+
+# adding a new column
+pi_ga = cbind(pi_ga, NA)
+colnames(pi_ga)[10] = c("Dist(m)")
+
+for (i in 1:length(pi_ga[,1]))
+{
+    if (length(pi_ga[[i,9]]) == 1) # length(pi_ga[[i,9]]) > 1 shows arrays with more than one gauge inside
+    {
+        x = c(as.numeric(pi_ga[[i,3]]), as.numeric(pi_ga[[i,2]]))
+        y = c(as.numeric(pi_ga[[i,7]]), as.numeric(pi_ga[[i,6]]))
+        pi_ga[[i,10]] = distm(x,y,fun = distHaversine)
+    }
+    else
+    {
+        Dst = NULL
+        for (j in 1:length(pi_ga[[i,9]]))
+        {
+            r = pi_ga[[i,9]][j] # row number of all gauge points that are within the pixel
+            x = c(as.numeric(pi_ga[[r,3]]), as.numeric(pi_ga[[r,2]]))
+            y = c(as.numeric(pi_ga[[r,7]]), as.numeric(pi_ga[[r,6]]))
+            Dst = cbind(Dst , distm(x,y,fun = distHaversine))
+        }
+        pi_ga[[i,10]] = Dst
+    }
+}
+
+setwd(dir_out)
+save(pi_ga, file= "Pi_Ga_Dist.RData")
+```
+
+# Section 4: Making the reference data set
+Importing .txt files of gauge observations into R and preparing the timeseries of observations, are done in this section.  
+
+```{r eval=FALSE}
+setwd(paste(dir_in,"/pcp txt files",sep = ""))
+
+Ga_Names <- list.files(pattern = ".txt") # list the names of all .txt files
+d1 <- read.table (Ga_Names[1], header = FALSE)
+d1 <- d1[-1,]
+
+Total_Obs <- data.frame(matrix(data = 0, nrow = nrow(d1), ncol = length(Ga_Names)+4)) # Initially make the Total_obs object which will serve as our reference data set till the end. 
+
+# making the four first columns which are the dates
+dates = d1[,1]
+dates1 = as.Date(dates, "%Y%m%d")
+Total_Obs[,2] <- format(dates1, "%Y")
+Total_Obs[,3] <- format(dates1, "%m")
+Total_Obs[,4] <- format(dates1, "%d")
+# first column: Climatological Seasons
+Total_Obs[which(Total_Obs[,3]=="01" | Total_Obs[,3]=="02" | Total_Obs[,3]=="03" | Total_Obs[,3]=="04"),1] = 1
+Total_Obs[which(Total_Obs[,3]=="05" | Total_Obs[,3]=="06" | Total_Obs[,3]=="07" | Total_Obs[,3]=="08"),1] = 2
+Total_Obs[which(Total_Obs[,3]=="09" | Total_Obs[,3]=="10" | Total_Obs[,3]=="11" | Total_Obs[,3]=="12"),1] = 3
+
+for (i in 1:length(Ga_Names))
+{
+    df <- read.table (Ga_Names[i], header = FALSE)  
+    df <- df[-1,]
+    Prcp <- sapply(as.vector(df[,3]), as.numeric)
+    Total_Obs[,4+i] <- Prcp
+}
+
+Total_Obs[Total_Obs==-999]<- NA
+Total_Obs[,1:4] = as.numeric(as.matrix(Total_Obs[,1:4]))
+
+# Changing colnames
+colnames(Total_Obs) <- c("Season","Year", "Month", "Day")
+# station Names: a matrix of station names splited into "name" + "PRCP.txt"
+stn <- matrix(unlist(strsplit(Ga_Names, "_")), ncol=2, byrow=TRUE)
+colnames(Total_Obs)[5:length(Total_Obs)] <- stn[,1]
+
+setwd(dir_out)
+save("Total_Obs",file = "Reference Dataset.RData")
+#write.csv(Total_Obs, file = "Reference Dataset.csv")
+#save(stn, file = "stn.RData")
+
+#############
+# Making the monthly Reference data set:
+#############
+Total_Obs_M = aggregate(Total_Obs[,5:length(Total_Obs[1,])], by=list(Total_Obs$Month, Total_Obs$Year), FUN=sum, na.rm=TRUE)
+Total_Obs_M = Total_Obs_M[,c(2,1,3:length(Total_Obs_M[1,]))]
+
+# Adding column of Season to the Total_Obs_M object:
+Total_Obs_M = cbind(NA , Total_Obs_M)
+Total_Obs_M[Total_Obs_M[,3] <=4 , 1] = 1 # Wet season
+Total_Obs_M[Total_Obs_M[,3] <=8 & Total_Obs_M[,3] >=5 , 1] = 2 # Dry season
+Total_Obs_M[Total_Obs_M[,3] >=9 , 1] = 3 # Transition season
+colnames(Total_Obs_M)[1:3] = c("Season", "Year", "Month")
+
+#####################################
+# counting NA values at each month. 
+# As an assumption in this study, the monthly precipitation record of those months at which the number of days without recorded values (NA values) are more than 5 days, are considered to be "NA". In other words, months with more than 25 days of records are aggregated and included in the rest of the calculations. 
+#####################################
+dailyna = Total_Obs # making a Daily_NA matrix
+dailyna[,5:length(Total_Obs[1,])] = as.integer(is.na(Total_Obs[,5:length(Total_Obs[1,])]))
+mona = aggregate(dailyna[,5:length(dailyna[1,])], by=list(dailyna$Month , dailyna$Year), FUN=sum, na.rm=TRUE) # calculating the monthly number of NA values
+mona = cbind(NA, mona)
+
+for (i in 5:length(Total_Obs_M[1,]))
+{
+    Total_Obs_M[mona[,i] > 5,i] = NA
+}
+#####################################
+setwd(dir_out)
+save(Total_Obs_M ,file = "Reference Dataset_Monthly.RData")
+```
+
+# Section 5: Making the daily GMET_Reference data set
+Aim of this section is to average the guage values for each pixel and make the reference dataset for each GMET pixel and then produce Reference Vs GMET time series. Here we want to make the timeseries of reference dataset plus the GMET dataset and insert in the AllD list. In stations with just  one guage in them, no averaging is needed but for those with more than one, we should get the average of observed values in all gauges that exist in the pixel, by using IDW method and distances which can be found in pi_ga data.frame.  
+
+```{r eval=FALSE}
+setwd(dir_out)
+load("GMET_P_Total_AllGa.RData")
+load("Reference Dataset.RData")
+load("Pi_Ga_Dist.RData")
+
+pixname = unique(pi_ga[,8]) # the pixels in the study area at which there is at least one gauge station
+AllD = matrix(list(), nrow = length(pixname), ncol = 7)
+colnames(AllD) = c("Pi_Name", "Dataset", "Lat_Pi", "Lon_Pi", "LatID_Pi", "LonID_Pi", "No_G_in_Pi")
+
+# in the lines bellow, we are preparing the AllD list in terms of initial data like Pi-Name and lat and lon and the number of Gauges at each pixel. after that we will make the dataset ready and insert timeseries in the list
+AllD[,1] = pixname
+for (i in 1:length(AllD[,1]))
+{
+    id = which(pi_ga[,8] == AllD[[i,1]]) # find the equivalant pixel name in pi_ga dataframe in comparison with AllD first column
+    AllD[i,3] = pi_ga[id[1],6] # if there is only one gauge in the pixel, id will return a single value and if there is more than
+    AllD[i,4] = pi_ga[id[1],7] # one gauge in the pixel, id will have more than one value within it. So by writing id[1], in both
+    AllD[i,5] = pi_ga[id[1],4] # cases the code will do the correct job
+    AllD[i,6] = pi_ga[id[1],5]
+    AllD[i,7] = length(id)
+}
+
+# Making the GMET Vs Reference data set and putting it in AllD[,2]
+# TS: Time Series of reference and GMET dataset
+
+for (i in 1:length(AllD[,1]))
+{
+    gmet_col = which(colnames(GMET_P) == paste(AllD[i,5], "," ,AllD[i,6])) # find the corresponding col of the considered pixel in GMET_P
+    gmet_pcp = GMET_P[,gmet_col[1]] # read the dataseries of the GMET for the pixel
+    TS = NULL
+    if (AllD[[i,7]] == 1) # only one gauge in the pixel
+    {
+        id = which(pi_ga[,8] == AllD[[i,1]]) # which row(s) in the pi_ga is(are) the corresponding one(s) to this pixel?
+        Ga_col = which(colnames(Total_Obs) == pi_ga[[id,1]]) # find the corresponding col of the gauge in Total_Obs object
+        ga_pcp = Total_Obs[,Ga_col[1]]
+        TS = cbind(Total_Obs[,1:4],ga_pcp,gmet_pcp)
+    } else
+    #------------------------------------------------------------------------------
+    # Average of the gauge observations must be calculated using their IDW weights:
+    # -----------------------------------------------------------------------------
+    {
+        id = which(pi_ga[,8] == AllD[[i,1]]) # which row(s) in the pi_ga is(are) the corresponding one(s) to this pixel?
+        
+        obs = matrix(NA, nrow = nrow(Total_Obs), ncol = AllD[[i,7]]) # an empty matrix for all gauges that exist in this pixel
+        obs = Total_Obs[,which(colnames(Total_Obs) %in% pi_ga[id,1])] # for the number of gauges that exist in this pixel, 
+        # find the corresponding col of the gauge in Total_Obs object and put them in the obs matrice 
+        
+# the weights must be calculated based on the number of NAs. So if all obs values at every gauge is NA, then the Ga_Avg should also be NA. if only one is not NA, GA_Avg must be equal to that one, otherwise IDW weights must be calculated based on the number of gauges that are not NA at that day. this is done here through making a Dst matrix with the same dimension of obs matrix at which for the NA records, the Dst element is also NA. then the weights are calculated based on the not NA values at each row (each day). 
+        Dst = matrix(pi_ga[[id[1],10]], nrow = nrow(obs), ncol = ncol(obs), byrow = TRUE) # read the distances (m)
+        obs_NA = is.na(obs) 
+        obs_NA[is.na(obs)] = NA
+        obs_NA[!is.na(obs)] = 1
+        Dst = Dst * obs_NA
+        w = (1/Dst) / rowSums(1/Dst, na.rm = TRUE) # IDW weights
+        
+        ga_pcp = apply(obs * w, MARGIN = 1, FUN = sum, na.rm = TRUE) # ga_pcp = Ga_Avg
+        # ga_pcp = rowSums(obs * w, na.rm = TRUE) # this function will also work the same as above one
+        
+        all_NA = which(rowSums(is.na(obs)) == AllD[i,7])# check when all obs records are NA. at this days, the Ga_Avg must also be NA
+        ga_pcp[all_NA] = NA
+        
+        TS = cbind(Total_Obs[,1:4], ga_pcp, gmet_pcp) 
+    }
+    AllD[[i,2]] = TS
+    obs = NULL
+    w = NULL
+}
+
+setwd(dir_out)
+save(AllD, file= "GMET_Vs_Ref_AllD.RData")
+
+```
+
+# Section 6: Making the monthly GMET_Reference data set
+Aim of this section is to make the monthly time series from the AllD object which contains all GMET Vs Guage observation values. Rule in culculating the monthly values: at each month, if the total number of days with NA record is greater than 5, that month is considered as a NA. Otherwise, the summation is calculated.  
+```{r eval=FALSE}
+setwd(dir_out)
+load("GMET_Vs_Ref_AllD.RData")
+
+AllD_M = matrix(list(), nrow = length(AllD[,1]), ncol = length(AllD[1,])) # Monthly data set
+colnames(AllD_M) = c("Pi_Name", "Dataset", "Lat_Pi", "Lon_Pi", "LatID_Pi", "LonID_Pi", "No_G_in_Pi")
+AllD_M[,c(1,3:length(AllD[1,]))] = AllD[,c(1,3:length(AllD[1,]))]
+
+for (i in 1:length(AllD[,1]))
+{
+    Data = as.matrix(AllD[[i,2]]) # reading the daily time series of obs and GMET data for each pixel
+    Data_m = aggregate(Data[,5:6] ~ Month + Year, Data, FUN = sum, na.rm = TRUE, na.action=NULL) # calculating the monthly sum of rainfals both for obs + GMET. 
+    # This command also works here: (Data1 <- as.data.frame(Data))
+    #   Data_m = aggregate(Data1[,5:6], by=list(Data1$Month , Data1$Year), FUN=sum, na.rm=TRUE)
+    Data_m = Data_m[c(2,1,3,4)] # reordering the columns
+    
+    # Adding column of Season to the Data_m object:
+    Data_m = cbind(matrix(NA, nrow(Data_m), 1) , Data_m)
+    Data_m[Data_m[,3] <=4 , 1] = 1
+    Data_m[Data_m[,3] <=8 & Data_m[,3] >=5 , 1] = 2
+    Data_m[Data_m[,3] >=9 , 1] = 3
+    #############
+    colnames(Data_m) = c("Season","Year","Month","Ga_pcp","GMET_pcp")
+    #####################################
+    # counting NA values at each month
+    #####################################
+    dailyna = Data # making a Daily_NA matrix
+    dailyna[,5:6] = as.integer(is.na(Data[,5:6]))
+    mona = aggregate(dailyna[,5:6] ~ Month + Year, dailyna, FUN = sum) # calculating the monthly number of NA values both for obs + GMET. As an assumption in this study, months with more than 25 days of records are aggregated and included in the rest of the calculations. The rest are assumed to be NA. 
+    Data_m[mona[,3] > 5,4] = NA
+    Data_m[mona[,4] > 5,5] = NA
+    #####################################
+    
+    AllD_M[[i,2]] = Data_m
+    Data_m = NULL
+}
+
+setwd(dir_out)
+save(AllD_M, file= "GMET_Vs_Ref_AllD_Monthly.RData")
+```
+
+# Section 7: Making the annual GMET_Reference data set
+Aim of this section is to make the annual time series from the AllD object which contains all GMET Vs Guage observation values.  
+
+```{r eval=FALSE}
+setwd(dir_out)
+load("GMET_Vs_Ref_AllD.RData")
+
+AllD_an = matrix(list(), nrow = length(AllD[,1]), ncol = length(AllD[1,]))
+colnames(AllD_an) = c("Pi_Name", "Dataset", "Lat_Pi", "Lon_Pi", "LatID_Pi", "LonID_Pi", "No_G_in_Pi")
+AllD_an[,c(1,3:length(AllD[1,]))] = AllD[,c(1,3:length(AllD[1,]))]
+
+for (i in 1:length(AllD[,1]))
+{
+    Data = as.data.frame(AllD[[i,2]]) # reading the time series of obs and GMET data for each pixel
+    Data_an = aggregate(Data[,5:6], by = list(Data$Year), FUN= sum) # here I didn't add term "na.rm=TRUE" deliberately since if we are facing a NA value for even one month in a year, it may cause big bias in the observed values. So I don't want to add that year in the evaluation for that specific pixel. 
+    
+    AllD_an[[i,2]] = Data_an
+    Data_an = NULL
+}
+
+setwd(dir_out)
+save(AllD_an, file= "GMET_Vs_Ref_AllD_Annual.RData")
+```
+
+# Section 8: Annual average time series over all the study area (Bolivia)
+Purpose of this section is to calculate the Annual avg values over all grids. So for each month I only want one single raifall value either for obs or GMET which represents for the whole pixels. so average is taken over the pixels not time.  
+
+```{r }
+setwd(dir_out)
+load("GMET_Vs_Ref_AllD_Annual.RData")
+
+GMET_ts = NULL # GMET Time Series
+obs_ts = NULL # Observation Time Series
+
+for (i in 1:length(AllD_an[,1]))
+{
+    Data = AllD_an[[i,2]]
+    GMET_ts = cbind(GMET_ts, Data[,3])
+    obs_ts = cbind(obs_ts, Data[,2])
+}
+
+obs_avg_ts = rowMeans(obs_ts, na.rm = TRUE) # Calculating the average of observations in the study area
+GMET_avg_ts = rowMeans(GMET_ts, na.rm = TRUE) # Calculating the average of GMET values in the study area
+
+obs_avg_ts = as.data.frame(obs_avg_ts)
+GMET_avg_ts = as.data.frame(GMET_avg_ts)
+Annual_obs_GMET = cbind(Data[,1],obs_avg_ts,GMET_avg_ts)
+colnames(Annual_obs_GMET) = c("Year", "obs_Avg", "GMET_Avg")
+
+setwd(dir_stats)
+save(obs_avg_ts, GMET_avg_ts, file= "Annual_Avg_TS.RData")
+save(Annual_obs_GMET, file = "Annual_obs_GMET.RData")
+#write.csv(Annual_obs_GMET, file = "Annual_obs_GMET.csv")
+
+# Creating the comparison graph of GMET and Observation annual time series
+Annual_Graph = ggplot(Annual_obs_GMET, aes(x = Year, y = obs_Avg)) + coord_cartesian(xlim=c(1980, 2016)) + 
+    scale_x_continuous(breaks=seq(1980, 2016, 5)) + coord_cartesian(ylim=c(200, 1200)) + 
+    scale_y_continuous(breaks=seq(0, 1400, 200)) +
+    geom_line(aes(y = Annual_obs_GMET$obs_Avg, colour = "Observation"), size = 0.8) +
+    geom_line(aes(y = Annual_obs_GMET$GMET_Avg, colour = "GMET"), size = 0.8) +
+    scale_colour_manual(name = "pcp series:", values=c("blue", "red")) +
+    theme(legend.position="bottom") + geom_area(fill=alpha('slateblue',0.2)) +
+    labs(title="Annual GMET Precipitation Vs Observation values", x="Year", y="Mean Annual Precipitation (mm/year)")
+print(Annual_Graph)
+```
+  
+Saving the "Annual_Graph":
+```{r eval=FALSE}
+# the following lines will save the graph that is already being seen in the 'Plots' tab of the RStudio
+dev.copy(pdf,'Annual_Graph.pdf')
+dev.off()
+```
+
+# Section 9: Monthly average time series over all the study area (Bolivia)
+Purpose of this code is to calculate the monthly avg values over all grids. So for each month I only want one single raifall value either for obs or GMET which represents for the whole pixels. so average is taken over the pixels not time.  
+
+```{r}
+setwd(dir_out)
+load("GMET_Vs_Ref_AllD_Monthly.RData")
+
+GMET_ts = NULL # GMET Time Series
+obs_ts = NULL # Observation Time Series
+
+for (i in 1:length(AllD_M[,1]))
+{
+    Data = AllD_M[[i,2]]
+    GMET_ts = cbind(GMET_ts, Data[,5])
+    obs_ts = cbind(obs_ts, Data[,4])
+}
+
+obs_avg_ts = rowMeans(obs_ts, na.rm = TRUE)
+GMET_avg_ts = rowMeans(GMET_ts, na.rm = TRUE)
+
+obs_avg_ts = as.data.frame(obs_avg_ts)
+GMET_avg_ts = as.data.frame(GMET_avg_ts)
+monthly_obs_GMET = cbind(Data[,3],obs_avg_ts,GMET_avg_ts)
+colnames(monthly_obs_GMET) = c("Month", "obs_Avg", "GMET_Avg")
+
+setwd(dir_stats)
+save(obs_avg_ts, GMET_avg_ts, file= "Monthly_Avg_TS.RData")
+save(monthly_obs_GMET, file= "monthly_obs_GMET.RData")
+#write.csv(monthly_obs_GMET, file = "monthly_obs_GMET.csv")
+
+Monthly_Graph = ggplot(monthly_obs_GMET, aes(x = seq(1:length(monthly_obs_GMET[,1])), y = obs_Avg)) + coord_cartesian(xlim=c(0, 450)) + 
+    scale_x_continuous(breaks=seq(0, 450, 50)) + coord_cartesian(ylim=c(0, 300)) + 
+    scale_y_continuous(breaks=seq(0, 300, 50)) +
+    geom_line(aes(y = monthly_obs_GMET$obs_Avg, colour = "Observation"), size = 0.8) + 
+    geom_line(aes(y = monthly_obs_GMET$GMET_Avg, colour = "GMET"), size = 0.8) +
+    scale_colour_manual(name = "pcp series:", values=c("blue", "red")) +
+    theme(legend.position="bottom") + geom_area(fill=alpha('slateblue',0.2)) +
+    labs(title="Monthly GMET Precipitation Vs Observation values", x="Month", y="Mean monthly Precipitation (mm/month)")
+print(Monthly_Graph)
+```
+  
+Saving the "Annual_Graph":
+```{r eval=FALSE}
+# the following lines will save the graph that is already being seen in the 'Plots' tab of the RStudio
+dev.copy(pdf,'Monthly_Graph.pdf')
+dev.off()
+```
+
+# Section 10: Scatter Plot 
+Purpose of this section is to make two time series, one for the GMET and the other for reference observations and plot them against each other.  
+```{r eval=FALSE}
+pairData = function(AllD){
+    allpairs = NULL
+    for (i in 1:length(AllD[,1]))
+    {
+        Data = AllD[[i,2]]
+        allpairs = rbind(allpairs, Data)
+    }
+    return(allpairs)
+}
+```
+the 'paiData' is a function for making the needed time series for a scatter plot which can both be called for daily, or monthly data.  
+
+**IMPORTANT NOTE**  
+*Running this function for the Daily data will take a long time since the plot will be a super heavy graph with lots of points. So after execution of the next command line ('menu' command line), choosing the "Daily" option is not recommended though the "Monthly" one is also time-consuming enough.*  
+```{r eval=FALSE}
+pairtype = menu(c("Daily" , "Monthly"), graphics = TRUE, title = "How do you want the pair data?")
+
+if (pairtype == 1) { # Daily pairs
+    setwd(dir_out)
+    load("GMET_Vs_Ref_AllD.RData")
+    
+    # call function
+    allpairs_D = pairData(AllD)
+    
+    setwd(dir_stats)
+    save(allpairs_D, file= "scatter_plot_Data_Daily.RData")
+    #write.csv(allpairs_D, file= "scatter_plot_Data_Daily.csv")
+    ScatterPlot_D = ggplot(data = allpairs_D, aes(x=ga_pcp, y=gmet_pcp)) + geom_point(colour = "blue") + coord_cartesian(xlim=c(0, 500)) + 
+        scale_x_continuous(breaks=seq(0, 500, 100)) + coord_cartesian(ylim=c(0, 500)) + 
+        scale_y_continuous(breaks=seq(0, 500, 100)) + geom_abline(intercept = 0, slope = 1, col = "black", size = 1) +
+        geom_text(x=300,y=320,label="Perfect Agreement Line", angle = 45) +
+        labs(title="Scatter Plot of Daily GMET_Observation Precipitation", x="Observed Values (mm/Day)", y="GMET Estimations (mm/Day)")
+    print(ScatterPlot_D)
+    dev.copy(pdf,'ScatterPlot_D.pdf')
+    dev.off()
+} else if (pairtype == 2) { # Monthly pairs
+    setwd(dir_out)
+    load("GMET_Vs_Ref_AllD_Monthly.RData")
+    
+    # call function
+    allpairs_M = pairData(AllD = AllD_M)
+    
+    setwd(dir_stats)
+    save(allpairs_M, file= "scatter_plot_Data_Monthly.RData")
+    #write.csv(allpairs_M, file= "scatter_plot_Data_Monthly.csv")
+    ScatterPlot_M = ggplot(data = allpairs_M, aes(x=Ga_pcp, y=GMET_pcp)) + geom_point(colour = "blue") + coord_cartesian(xlim=c(0, 1500)) + 
+        scale_x_continuous(breaks=seq(0, 1500, 500)) + coord_cartesian(ylim=c(0, 1500)) + 
+        scale_y_continuous(breaks=seq(0, 1500, 500)) + geom_abline(intercept = 0, slope = 1, col = "black", size = 1) +
+        geom_text(x=1100,y=1150,label="Perfect Agreement Line", angle = 45) +
+        labs(title="Scatter Plot of Monthly GMET_Observation Precipitation", x="Observed Values (mm/month)", y="GMET Estimations (mm/month)")
+    print(ScatterPlot_M)
+    dev.copy(pdf,'ScatterPlot_M.pdf')
+    dev.off()
+} else {
+    cat('Please select a valid statistical type and re-run the code')
+}
+
+```
+![](C:/Users/SEI_user/Documents/Bolivia/Calculation/Integrating all codes/Outputs/Stats/ScatterPlot_M.png)
+  
+# Section 11: Statistical Analysis (Daily, Monthly, Seasonal)
+El enfoque de validación de la grilla se basa en la evaluación del desempeño del modelo sobre el territorio de Bolivia, usando un enfoque estadístico y de descomposición del error a diferentes escalas de tiempo diario, mensual y anual y para diferentes estaciones.  
+Para la validación estadística se usaron las métricas de coeficiente de correlación (CC), error medio del sesgo (MBE), error de la raíz cuadrada (RMSE), coeficiente de variación del RMSE (CV-RMSE) y error medio absoluto (MAE). Therefore, the purpose of the following chunk is to calculate statistical measures over the daily dataset.
+```{r eval=FALSE}
+stats_F = function(AllD,rc,gc) {
+    Corel = matrix(NA, nrow = length(AllD[,1]), ncol = 1)
+    MBE = matrix(NA, nrow = length(AllD[,1]), ncol = 1)
+    RMSE = matrix(NA, nrow = length(AllD[,1]), ncol = 1)
+    CVRMSE = matrix(NA, nrow = length(AllD[,1]), ncol = 1)
+    MAE = matrix(NA, nrow = length(AllD[,1]), ncol = 1)
+    
+    
+    for (i in 1:length(AllD[,1]))
+    {
+        Data = AllD[[i,2]]
+        #########################
+        # Correlation Coeficient
+        #########################
+        Corel[i,1] = cor(Data[,rc],Data[,gc], use = "na.or.complete")
+        
+        #########################
+        # Mean Bias Error (MBE)
+        #########################
+        er = Data[,rc] - Data[,gc]
+        bias = sum(er, na.rm = TRUE)
+        MBE[i,1] = (bias / sum(Data[,rc], na.rm = TRUE)) * 100
+        
+        #########################
+        # Root Mean Square (RMSE)
+        #########################
+        ser = (Data[,rc] - Data[,gc])^2 # Square Error
+        suser = sum(ser, na.rm = TRUE) # Sum Square Error
+        N = length(ser[!is.na(ser)]) # Number of dates ignoring NA values
+        RMSE[i,1] = sqrt(suser / N)
+        
+        #########################
+        # CV-RMSE
+        #########################
+        obs_avg = mean(Data[,rc], na.rm = TRUE)
+        CVRMSE[i,1] = RMSE[i,1] / obs_avg
+        
+        #########################
+        # Mean Absolute Error (MAE)
+        #########################
+        aer = abs(Data[,rc] - Data[,gc]) # absolute error
+        Total_aer = sum(aer, na.rm = TRUE)
+        N = length(aer[!is.na(aer)])
+        MAE[i,1] = Total_aer / N
+    }
+    
+    stats = data.frame(Corel, MBE, RMSE, CVRMSE, MAE, row.names = AllD[,1])
+
+    return(stats)
+}
+
+# Seasonal statistical calculations:
+seasonal_statF = function(AllD,rc,gc) {
+    Corel = matrix(NA, nrow = length(AllD[,1]), ncol = 3)
+    MBE = matrix(NA, nrow = length(AllD[,1]), ncol = 3)
+    RMSE = matrix(NA, nrow = length(AllD[,1]), ncol = 3)
+    CVRMSE = matrix(NA, nrow = length(AllD[,1]), ncol = 3)
+    MAE = matrix(NA, nrow = length(AllD[,1]), ncol = 3)
+    
+    for (i in 1:length(AllD[,1]))
+    {
+        Data = AllD[[i,2]]
+        for (s in 1:3) # 3 Seasons
+        {
+            #########################
+            # Correlation Coeficient
+            #########################
+            Corel[i,s] = cor(Data[Data[,1] == s, rc],Data[Data[,1] == s, gc], use = "na.or.complete")
+            
+            #########################
+            # Mean Bias Error (MBE)
+            #########################
+            er = Data[Data[,1] == s, rc] - Data[Data[,1] == s, gc]
+            bias = sum(er, na.rm = TRUE)
+            MBE[i,s] = (bias / sum(Data[Data[,1] == s, rc], na.rm = TRUE)) * 100
+            
+            #########################
+            # Root Mean Square (RMSE)
+            #########################
+            ser = (Data[Data[,1] == s, rc] - Data[Data[,1] == s, gc])^2 # Square Error
+            suser = sum(ser, na.rm = TRUE) # Sum Square Error
+            N = length(ser[!is.na(ser)]) # Number of dates ignoring NA values
+            RMSE[i,s] = sqrt(suser / N)
+            
+            #########################
+            # CV-RMSE
+            #########################
+            obs_avg = mean(Data[Data[,1] == s, rc], na.rm = TRUE)
+            CVRMSE[i,s] = RMSE[i, 1] / obs_avg
+            
+            #########################
+            # Mean Absolute Error (MAE)
+            #########################
+            aer = abs(Data[Data[,1] == s, rc] - Data[Data[,1] == s, gc]) # absolute error
+            Total_aer = sum(aer, na.rm = TRUE)
+            N = length(aer[!is.na(aer)])
+            MAE[i,s] = Total_aer / N
+        }
+    }
+    stats_Wet = data.frame(Corel=Corel[,1], MBE=MBE[,1], RMSE=RMSE[,1], CVRMSE=CVRMSE[,1], MAE=MAE[,1], row.names = AllD[,1])
+    stats_Dry = data.frame(Corel=Corel[,2], MBE=MBE[,2], RMSE=RMSE[,2], CVRMSE=CVRMSE[,2], MAE=MAE[,2], row.names = AllD[,1])
+    stats_Trans = data.frame(Corel=Corel[,3], MBE=MBE[,3], RMSE=RMSE[,3], CVRMSE=CVRMSE[,3], MAE=MAE[,3], row.names = AllD[,1])
+    
+    sea_stats = list("wet" = stats_Wet, "dry" = stats_Dry, "trans" = stats_Trans)
+    return(sea_stats)
+    
+}
+
+stats_type = menu(c("Daily", "Monthly", "Seasonal_Daily", "Seasonal_Monthly"), graphics = TRUE, title="How do you want the stats")
+
+setwd(dir_stats)
+ 
+if (stats_type == 1) { # Daily
+    rc = 5 # Ga_Avg column
+    gc = 6 # GMET column
+    setwd(dir_out)
+    load("GMET_Vs_Ref_AllD.RData")
+    
+    # call the function:
+    stats = stats_F(AllD,rc,gc)
+    
+    # save the results:
+    setwd(dir_stats)
+    save(stats, file = "Statistical_Measures_Daily.RData")
+    write.csv(stats, file = "Statistical_Measures_Daily.csv")
+
+} else if (stats_type == 2) { # Monthly
+    rc = 4 # Ga_Avg column
+    gc = 5 # GMET column
+    setwd(dir_out)
+    load("GMET_Vs_Ref_AllD_Monthly.RData")
+
+    # call the function:
+    stats = stats_F(AllD = AllD_M,rc,gc)
+    
+    # save the results:
+    setwd(dir_stats)
+    save(stats, file = "Statistical_Measures_Monthly.RData")
+    write.csv(stats, file = "Statistical_Measures_Monthly.csv")
+    
+} else if (stats_type == 3) { # Seasonal_Daily
+    rc = 5 # Ga_Avg column
+    gc = 6 # GMET column
+    setwd(dir_out)
+    load("GMET_Vs_Ref_AllD.RData")
+    
+    # call the function:
+    sea_stats = seasonal_statF(AllD,rc,gc)
+    
+    # save the results:
+    setwd(dir_stats)
+    save(sea_stats, file = "Statistical_Measures_Daily_Seasonal.RData")
+    
+    # summerize the data and make boxplots:
+    stats = stats_F(AllD,rc,gc)
+    boxp_data = rbind(cbind(Season = "Wet", sea_stats$wet), cbind(Season = "Dry", sea_stats$dry), 
+              cbind(Season = "Transition", sea_stats$trans), cbind(Season = "All Seasons", stats))
+    
+    # Correlation Boxplot:
+    boxp_Corel = ggplot(boxp_data, aes(x=Season, y=Corel, fill=Season)) +
+        geom_boxplot(color="red", alpha=0.2) + theme(legend.position="none") +
+        labs(title= "Seasonal Boxplot of Daily Correlation Coefficient in the Study Area", x= "", y="Correlation Coefficient (CC)")
+    print(boxp_Corel)
+    dev.copy(pdf,'Daily_boxp_Corel.pdf')
+    dev.off()
+    
+    # MBE Boxplot:
+    boxp_MBE = ggplot(boxp_data, aes(x=Season, y=MBE, fill=Season)) +
+        geom_boxplot(color="red", alpha=0.2, outlier.shape = NA) + theme(legend.position="none") +
+        scale_y_continuous(limits = quantile(boxp_data$CVRMSE, c(0.1, 0.9))) +
+        labs(title= "Seasonal Boxplot of Daily MBE in the Study Area", x= "", y="Bias (%)")
+    print(boxp_MBE)
+    dev.copy(pdf,'Daily_boxp_MBE.pdf')
+    dev.off()
+    
+    # CV_RMSE Boxplot:
+    boxp_CVRMSE = ggplot(boxp_data, aes(x=Season, y=CVRMSE, fill=Season)) +
+        geom_boxplot(color="red", alpha=0.2, outlier.shape = NA) + theme(legend.position="none") + 
+        scale_y_continuous(limits = quantile(boxp_data$CVRMSE, c(0.1, 0.9))) +
+        labs(title= "Seasonal Boxplot of Daily CV_RMSE in the Study Area", x= "", y="CV_RMSE")
+    print(boxp_CVRMSE)
+    dev.copy(pdf,'Daily_boxp_CVRMSE.pdf')
+    dev.off()
+    
+    # MAE Boxplot:
+    boxp_MAE = ggplot(boxp_data, aes(x=Season, y=MAE, fill=Season)) +
+        geom_boxplot(color="red", alpha=0.2) + theme(legend.position="none") +
+        labs(title= "Seasonal Boxplot of Daily MAE in the Study Area", x= "", y="Mean Absolute Error (mm/day)")
+    print(boxp_MAE) 
+    dev.copy(pdf,'Daily_boxp_MAE.pdf')
+    dev.off()
+    
+} else if (stats_type == 4) { # Seasonal_Monthly
+    rc = 4 # Ga_Avg column
+    gc = 5 # GMET column
+    setwd(dir_out)
+    load("GMET_Vs_Ref_AllD_Monthly.RData")
+
+    # call the function:
+    sea_stats = seasonal_statF(AllD = AllD_M,rc,gc)
+    
+    # save the results:
+    setwd(dir_stats)
+    save(sea_stats, file = "Statistical_Measures_Monthly_Seasonal.RData")
+    
+    # summerize the data and make boxplots:
+    stats = stats_F(AllD_M,rc,gc)
+    boxp_data = rbind(cbind(Season = "Wet", sea_stats$wet), cbind(Season = "Dry", sea_stats$dry), 
+                      cbind(Season = "Transition", sea_stats$trans), cbind(Season = "All Seasons", stats))
+    
+    # Correlation Boxplot:
+    boxp_Corel = ggplot(boxp_data, aes(x=Season, y=Corel, fill=Season)) +
+        geom_boxplot(color="red", alpha=0.2) + theme(legend.position="none") +
+        labs(title= "Seasonal Boxplot of Monthly Correlation Coefficient in the Study Area", x= "", y="Correlation Coefficient (CC)")
+    print(boxp_Corel)
+    dev.copy(pdf,'Monthly_boxp_Corel.pdf')
+    dev.off()
+    
+    # MBE Boxplot:
+    boxp_MBE = ggplot(boxp_data, aes(x=Season, y=MBE, fill=Season)) +
+        geom_boxplot(color="red", alpha=0.2, outlier.shape = NA) + theme(legend.position="none") +
+        scale_y_continuous(limits = quantile(boxp_data$CVRMSE, c(0.1, 0.9))) +
+        labs(title= "Seasonal Boxplot of Monthly MBE in the Study Area", x= "", y="Bias (%)")
+    print(boxp_MBE)
+    dev.copy(pdf,'Monthly_boxp_MBE.pdf')
+    dev.off()
+    
+    # CV_RMSE Boxplot:
+    boxp_CVRMSE = ggplot(boxp_data, aes(x=Season, y=CVRMSE, fill=Season)) +
+        geom_boxplot(color="red", alpha=0.2, outlier.shape = NA) + theme(legend.position="none") + 
+        scale_y_continuous(limits = quantile(boxp_data$CVRMSE, c(0.1, 0.9))) +
+        labs(title= "Seasonal Boxplot of Monthly CV_RMSE in the Study Area", x= "", y="CV_RMSE")
+    print(boxp_CVRMSE)
+    dev.copy(pdf,'Monthly_boxp_CVRMSE.pdf')
+    dev.off()
+    
+    # MAE Boxplot:
+    boxp_MAE = ggplot(boxp_data, aes(x=Season, y=MAE, fill=Season)) +
+        geom_boxplot(color="red", alpha=0.2) + theme(legend.position="none") +
+        labs(title= "Seasonal Boxplot of Monthly MAE in the Study Area", x= "", y="Mean Absolute Error (mm/day)")
+    print(boxp_MAE) 
+    dev.copy(pdf,'Monthly_boxp_MAE.pdf')
+    dev.off()
+} else {
+    cat('Please select a valid statistical type and re-run the code')
+}
+```
+
+Now lets see some of the statistical results. We start by taking a look at the daily statistical measures.  
+```{r}
+    setwd(dir_stats)
+    load(file = "Statistical_Measures_Daily.RData")
+    # summerize the data and make Table:
+    Avg = colMeans(stats)
+    Min = apply(stats,2,min)
+    Max = apply(stats,2,max)
+    Tbl_stD = data.frame(Min=round(Min,2), Avg=round(Avg,2), Max=round(Max,2), row.names = colnames(stats))# Table_Stats_Daily: Tbl_stD
+    
+    # this table will be shown in R Markdown when converting to an HTML file
+    kable(Tbl_stD,format = "html", caption = "Table of Daily Statistical Measures") %>%
+        kable_styling(bootstrap_options = "striped", full_width = F)
+```
+
+and the monthly statistical measures:  
+```{r}
+    setwd(dir_stats)
+    load(file = "Statistical_Measures_Monthly.RData")
+    # summerize the data and make Table:
+    Avg = colMeans(stats)
+    Min = apply(stats,2,min)
+    Max = apply(stats,2,max)
+    Tbl_stD = data.frame(Min=round(Min,2), Avg=round(Avg,2), Max=round(Max,2), row.names = colnames(stats))# Table_Stats_Monthly: Tbl_stD
+    
+    # this table will be shown in R Markdown when converting to an HTML file
+    kable(Tbl_stD,format = "html", caption = "Table of Monthly Statistical Measures")%>%
+        kable_styling(bootstrap_options = "striped", full_width = F)
+```
+
+> Seasonal daily Correlation Coeficient:  
+
+![](C:/Users/SEI_user/Documents/Bolivia/Calculation/Integrating all codes/Outputs/Stats/Daily_boxp_Corel.png)  
+
+> Seasonal daily Mean Bias Error:  
+
+![](C:/Users/SEI_user/Documents/Bolivia/Calculation/Integrating all codes/Outputs/Stats/Daily_boxp_MBE.png)  
+
+> Seasonal daily CV-RMSE:  
+
+![](C:/Users/SEI_user/Documents/Bolivia/Calculation/Integrating all codes/Outputs/Stats/Daily_boxp_CVRMSE.png)  
+
+> Seasonal daily Mean Absolute Error:  
+
+![](C:/Users/SEI_user/Documents/Bolivia/Calculation/Integrating all codes/Outputs/Stats/Daily_boxp_MAE.png)  
+
+> Seasonal monthly Correlation Coeficient:  
+
+![](C:/Users/SEI_user/Documents/Bolivia/Calculation/Integrating all codes/Outputs/Stats/Monthly_boxp_Corel.png)  
+
+> Seasonal monthly Mean Bias Error:  
+
+![](C:/Users/SEI_user/Documents/Bolivia/Calculation/Integrating all codes/Outputs/Stats/Monthly_boxp_MBE.png)  
+
+> Seasonal monthly CV-RMSE:  
+
+![](C:/Users/SEI_user/Documents/Bolivia/Calculation/Integrating all codes/Outputs/Stats/Monthly_boxp_CVRMSE.png)  
+
+> Seasonal monthly Mean Absolute Error:  
+
+![](C:/Users/SEI_user/Documents/Bolivia/Calculation/Integrating all codes/Outputs/Stats/Monthly_boxp_MAE.png)  
+
+# Section 12: Systematic and Random Error (Daily, Monthly, Seasonal)  
+Purpose of this script is to calculate the systematic and random error components of the estimation model. In order to do that, we should initially perform a linear regression over the GMET-Gauge data and then based on the Sys-Rand formula we can calculate the systematic and random error components.  
+```{r eval=FALSE}
+sysrand_F = function(AllD,rc,gc) {
+    sysrand = data.frame(Pi_Name = NA, MSD = NA, MSDs = NA, MSDr = NA)
+    
+    for (i in 1:length(AllD[,1]))
+    {
+        sysrand[i,1] = AllD[[i,1]]
+        Data = AllD[[i,2]]
+        colnames(Data)[rc:gc] = c("obs" , "GMET")
+        Data.mod1 = lm(GMET ~ obs, data = Data)
+        a = Data.mod1$coefficients[[1]]
+        b = Data.mod1$coefficients[[2]]
+        Data = cbind(Data, b * Data[,rc] + a)
+        sysrand[i,2] = sum((Data[, gc] - Data[, rc]) ^ 2 , na.rm = TRUE) / length(which(!is.na(Data[, rc]))) # MSD
+        sysrand[i,3] = sum((Data[, gc+1] - Data[, rc]) ^ 2 , na.rm = TRUE) / length(which(!is.na(Data[, rc]))) # MSDs ==> Systematic error component
+        sysrand[i,4] = sum((Data[, gc] - Data[, gc+1]) ^ 2 , na.rm = TRUE) / length(which(!is.na(Data[, rc]))) # MSDr ==> Random error component
+    }
+    return(sysrand)
+}
+
+# Seasonal statistical calculations:
+seasonal_sysrandF = function(AllD,rc,gc) {
+    sea_sysrand = data.frame(Pi_Name = NA, MSD_wet = NA, MSDs_wet = NA, MSDr_wet = NA, MSD_dry = NA, MSDs_dry = NA, MSDr_dry = NA
+                             , MSD_Trans = NA, MSDs_Trans = NA, MSDr_Trans = NA)
+    
+    for (i in 1:length(AllD[,1]))
+    {
+        sea_sysrand[i,1] = AllD[[i,1]]
+        Data = AllD[[i,2]]
+        colnames(Data)[rc:gc] = c("obs" , "GMET")
+        for (s in 1:3) # 3 Seasons
+        {
+            Data_S = Data[Data[,1] == s,]
+            Data.mod1 = lm(GMET ~ obs, data = Data_S)
+            a = Data.mod1$coefficients[[1]]
+            b = Data.mod1$coefficients[[2]]
+            Data_S = cbind(Data_S, b * Data_S[,rc] + a)
+            sea_sysrand[i,2+(s-1)*3] = sum((Data_S[, gc] - Data_S[, rc]) ^ 2 , na.rm = TRUE) / length(which(!is.na(Data_S[, rc]))) # MSD
+            sea_sysrand[i,3+(s-1)*3] = sum((Data_S[, gc+1] - Data_S[, rc]) ^ 2 , na.rm = TRUE) / length(which(!is.na(Data_S[, rc]))) # MSDs ==> Systematic error component
+            sea_sysrand[i,4+(s-1)*3] = sum((Data_S[, gc] - Data_S[, gc+1]) ^ 2 , na.rm = TRUE) / length(which(!is.na(Data_S[, rc]))) # MSDr ==> Random error component
+        }
+    }
+    return(sea_sysrand)
+}
+
+stats_type = menu(c("Daily", "Monthly", "Seasonal_Daily", "Seasonal_Monthly"), graphics = TRUE, title="How do you want the stats")
+
+if (stats_type == 1) { # Daily
+    rc = 5 # Ga_Avg column
+    gc = 6 # GMET column
+    setwd(dir_out)
+    load("GMET_Vs_Ref_AllD.RData")
+    
+    # call the function:
+    sysrand = sysrand_F(AllD,rc,gc)
+    
+    # save the results:
+    setwd(dir_stats)
+    save(sysrand, file = "Sytematic_Random_Er_Daily.RData")
+    write.csv(sysrand, file = "Sytematic_Random_Er_Daily.csv")
+    
+    # summerizing the results and making the pie charts:
+    sysrand = cbind(sysrand, MSDs_Ratio = sysrand$MSDs / sysrand$MSD , MSDr_Ratio = sysrand$MSDr / sysrand$MSD)
+    avg_syser = mean(sysrand$MSDs_Ratio)
+    avg_rnder = mean(sysrand$MSDr_Ratio)
+    par(mfrow=c(1,1)) # parameter that dictates how many rows and columns of graphics to be present in the output. Here we have 1 row and 1 columns for our plot
+    Pie_sysrnd_D = pie(c(avg_syser,avg_rnder), labels = c(paste("MSDs",round(avg_syser,2),sep = " , "), paste("MSDr",round(avg_rnder,2),sep = " , ")), 
+        col=rainbow(3), main="Systematic and random error components for the daily time series")
+    print(Pie_sysrnd_D) 
+    dev.copy(pdf,'Pie_sysrnd_Daily.pdf')
+    dev.off()
+    
+} else if (stats_type == 2) { # Monthly
+    rc = 4 # Ga_Avg column
+    gc = 5 # GMET column
+    setwd(dir_out)
+    load("GMET_Vs_Ref_AllD_Monthly.RData")
+
+    # call the function:
+    sysrand = sysrand_F(AllD = AllD_M,rc,gc)
+    
+    # save the results:
+    setwd(dir_stats)
+    save(sysrand, file = "Sytematic_Random_Er_Monthly.RData")
+    write.csv(sysrand, file = "Sytematic_Random_Er_Monthly.csv")
+    
+    # summerizing the results and making the pie charts:
+    sysrand = cbind(sysrand, MSDs_Ratio = sysrand$MSDs / sysrand$MSD , MSDr_Ratio = sysrand$MSDr / sysrand$MSD)
+    avg_syser = mean(sysrand$MSDs_Ratio)
+    avg_rnder = mean(sysrand$MSDr_Ratio)
+    par(mfrow=c(1,1)) # parameter that dictates how many rows and columns of graphics to be present in the output. here we have 1 row and 1 columns for our plot
+    Pie_sysrnd_M = pie(c(avg_syser,avg_rnder), labels = c(paste("MSDs",round(avg_syser,2),sep = " , "), paste("MSDr",round(avg_rnder,2),sep = " , ")), 
+                       col=rainbow(3), main="Systematic and random error components for the monthly time series")
+    print(Pie_sysrnd_M) 
+    dev.copy(pdf,'Pie_sysrnd_Monthly.pdf')
+    dev.off()
+    
+} else if (stats_type == 3) { # Seasonal_Daily
+    rc = 5 # Ga_Avg column
+    gc = 6 # GMET column
+    setwd(dir_out)
+    load("GMET_Vs_Ref_AllD.RData")
+    
+    # call the function:
+    sea_sysrand = seasonal_sysrandF(AllD,rc,gc)
+    
+    # save the results:
+    setwd(dir_stats)
+    save(sea_sysrand, file = "Sytematic_Random_Er_Daily_Seasonal.RData")
+    write.csv(sea_sysrand, file = "Sytematic_Random_Er_Daily_Seasonal.csv")
+    
+    # summerizing the results and making the pie charts:
+    sea_sysrand = cbind(sea_sysrand, MSDs_rto_wet = sea_sysrand$MSDs_wet / sea_sysrand$MSD_wet , 
+                        MSDr_rto_wet = sea_sysrand$MSDr_wet / sea_sysrand$MSD_wet, 
+                        MSDs_rto_dry = sea_sysrand$MSDs_dry / sea_sysrand$MSD_dry,
+                        MSDr_rto_dry = sea_sysrand$MSDr_dry / sea_sysrand$MSD_dry,
+                        MSDs_rto_trans = sea_sysrand$MSDs_Trans / sea_sysrand$MSD_Trans,
+                        MSDr_rto_trans = sea_sysrand$MSDr_Trans / sea_sysrand$MSD_Trans)
+    
+    avg_syser_wet = mean(sea_sysrand$MSDs_rto_wet)
+    avg_rnder_wet = mean(sea_sysrand$MSDr_rto_wet)
+    avg_syser_dry = mean(sea_sysrand$MSDs_rto_dry)
+    avg_rnder_dry = mean(sea_sysrand$MSDr_rto_dry)
+    avg_syser_trans = mean(sea_sysrand$MSDs_rto_trans)
+    avg_rnder_trans = mean(sea_sysrand$MSDr_rto_trans)
+    
+    par(mfrow=c(1,3)) # parameter that dictates how many rows and columns of graphics to be present in the output. Here we have 1 row and 3 columns for our plot
+    Pie_sea_sysrnd_D = pie(c(avg_syser_wet,avg_rnder_wet), labels = c(paste("MSDs_wet",round(avg_syser_wet,2),sep = " , "), 
+                           paste("MSDr_wet",round(avg_rnder_wet,2),sep = " , ")), col=rainbow(3)) + 
+                       pie(c(avg_syser_dry,avg_rnder_dry), labels = c(paste("MSDs_dry",round(avg_syser_dry,2),sep = " , "), 
+                           paste("MSDr_dry",round(avg_rnder_dry,2),sep = " , ")), col=rainbow(3)) +
+                       pie(c(avg_syser_trans,avg_rnder_trans), labels = c(paste("MSDs_trans",round(avg_syser_trans,2),sep = " , "), 
+                           paste("MSDr_trans",round(avg_rnder_trans,2),sep = " , ")), col=rainbow(3)) +
+                        mtext(side=3,at=0,adj = 1, text="Systematic and random error components for the seasonal daily time series")
+    print(Pie_sea_sysrnd_D) 
+    dev.copy(pdf,'Pie_Seasonal_sysrnd_Daily.pdf')
+    dev.off()
+    
+} else if (stats_type == 4) { # Seasonal_Monthly
+    rc = 4 # Ga_Avg column
+    gc = 5 # GMET column
+    setwd(dir_out)
+    load("GMET_Vs_Ref_AllD_Monthly.RData")
+
+    # call the function:
+    sea_sysrand = seasonal_sysrandF(AllD = AllD_M,rc,gc)
+    
+    # save the results:
+    setwd(dir_stats)
+    save(sea_sysrand, file = "Sytematic_Random_Er_Monthly_Seasonal.RData")
+    write.csv(sea_sysrand, file = "Sytematic_Random_Er_Monthly_Seasonal.csv")
+    
+    # summerizing the results and making the pie charts:
+    sea_sysrand = cbind(sea_sysrand, MSDs_rto_wet = sea_sysrand$MSDs_wet / sea_sysrand$MSD_wet , 
+                        MSDr_rto_wet = sea_sysrand$MSDr_wet / sea_sysrand$MSD_wet, 
+                        MSDs_rto_dry = sea_sysrand$MSDs_dry / sea_sysrand$MSD_dry,
+                        MSDr_rto_dry = sea_sysrand$MSDr_dry / sea_sysrand$MSD_dry,
+                        MSDs_rto_trans = sea_sysrand$MSDs_Trans / sea_sysrand$MSD_Trans,
+                        MSDr_rto_trans = sea_sysrand$MSDr_Trans / sea_sysrand$MSD_Trans)
+    
+    avg_syser_wet = mean(sea_sysrand$MSDs_rto_wet)
+    avg_rnder_wet = mean(sea_sysrand$MSDr_rto_wet)
+    avg_syser_dry = mean(sea_sysrand$MSDs_rto_dry)
+    avg_rnder_dry = mean(sea_sysrand$MSDr_rto_dry)
+    avg_syser_trans = mean(sea_sysrand$MSDs_rto_trans)
+    avg_rnder_trans = mean(sea_sysrand$MSDr_rto_trans)
+    
+    par(mfrow=c(1,3)) # 1 row and 3 columns for our plot
+    Pie_sea_sysrnd_M = pie(c(avg_syser_wet,avg_rnder_wet), labels = c(paste("MSDs_wet",round(avg_syser_wet,2),sep = " , "), 
+                          paste("MSDr_wet",round(avg_rnder_wet,2),sep = " , ")), col=rainbow(3)) + 
+                       pie(c(avg_syser_dry,avg_rnder_dry), labels = c(paste("MSDs_dry",round(avg_syser_dry,2),sep = " , "), 
+                          paste("MSDr_dry",round(avg_rnder_dry,2),sep = " , ")), col=rainbow(3)) +
+                       pie(c(avg_syser_trans,avg_rnder_trans), labels = c(paste("MSDs_trans",round(avg_syser_trans,2),sep = " , "), 
+                          paste("MSDr_trans",round(avg_rnder_trans,2),sep = " , ")), col=rainbow(3)) +
+                       mtext(side=3,at=0,adj = 1, text="Systematic and random error components for the seasonal monthly time series")
+    print(Pie_sea_sysrnd_M) 
+    dev.copy(pdf,'Pie_Seasonal_sysrnd_Monthly.pdf')
+    dev.off()
+} else {
+    cat('Please select a valid statistical type and re-run the code')
+}
+```
+
+> Daily systematic and random error portions:  
+
+![](C:/Users/SEI_user/Documents/Bolivia/Calculation/Integrating all codes/Outputs/Stats/Pie_sysrnd_Daily.png)  
+
+> Monthly systematic and random error portions:  
+
+![](C:/Users/SEI_user/Documents/Bolivia/Calculation/Integrating all codes/Outputs/Stats/Pie_sysrnd_Monthly.png)  
+
+> Seasonal daily systematic and random error portions:  
+
+![](C:/Users/SEI_user/Documents/Bolivia/Calculation/Integrating all codes/Outputs/Stats/Pie_Seasonal_sysrnd_Daily.png)  
+
+> Seasonal monthly systematic and random error portions:  
+
+![](C:/Users/SEI_user/Documents/Bolivia/Calculation/Integrating all codes/Outputs/Stats/Pie_Seasonal_sysrnd_Monthly.png)  
+
+# Section 13: Categorical Evaluations
+Purpose of this script is to do the categorical analysis for the GMET Vs Gauge observation rainfals. Firstly, by testing different intervals for categories, the best interval values for the categories and for classification of observation rainfals are defined. Then, frequency distribution of GMET and Obs. are calculated at each category. Afterwards, the index of Reliability on GMET estimations is also calculated at different categories.  
+
+* Defining the limits of categories:
+This must be done by looking at the frequency distribution of observation pcp data, so it can't be automated. However, you can  initially check the values by writing: breaks = seq(0.0, upl, by=5), and then check the "obs.freq" table values to see how we can define the intervals. It is better to define the intervals in a way that they almost include same number of events (except the first [0-1) intervals which always include more than all others). On the other hand, these intervals must be hydorlogically logical and  justifiable.  
+
+```{r eval=FALSE}
+setwd(dir_stats)
+load("scatter_plot_Data_Daily.RData")
+
+range(allpairs_D$ga_pcp, na.rm = TRUE)
+# [1]   0.0000 536.6955   ====> This is the range of observed pcp values.
+range(allpairs_D$gmet_pcp, na.rm = TRUE)
+# [1]   0.0000 638.5846   ====> This is the range of GMET pcp values. So we should consider the categories in this range. 
+upl = ceiling(max(max(allpairs_D$ga_pcp, na.rm = TRUE) , max(allpairs_D$gmet_pcp, na.rm = TRUE)))  # uper limit
+###############################
+###############################
+breaks = c(0, 0.01, 1, 5, 10, 20, 50, 100, 700) # The first interval [0, 0.01) is defined to seperate zero pcp from others
+
+obs.cut = cut(allpairs_D$ga_pcp, breaks, right = FALSE)
+gmet.cut = cut(allpairs_D$gmet_pcp, breaks, right = FALSE)
+
+obs.freq = table(obs.cut)
+gmet.freq = table(gmet.cut)
+# plot(obs.freq)
+
+# it seems that the above intervals are working well for the current dataset. 
+catg.pairs = cbind(allpairs_D, obs.cut, gmet.cut)
+
+##############################################
+# Categorical Comparison of Obs. Vs GMET
+##############################################
+catg_Avgs = aggregate(catg.pairs[,5:6], by=list(catg.pairs$obs.cut), FUN=mean, na.rm=TRUE)
+colnames(catg_Avgs) = c("obs.interval", "obs.Avg", "gmet.Avg")
+
+# Table for the categorical evaluations
+catg_Avgs_table = cbind(Intervals = catg_Avgs$obs.interval , round(catg_Avgs[,2:3],2))
+
+# this table will be shown in R Markdown when converting to an HTML file
+kable(catg_Avgs_table,format = "html", caption = "Gauge and GMET average precipitations at different categories (mm/day)")%>%
+    kable_styling(bootstrap_options = "striped", full_width = F)
+
+# Bar chart plot:
+setwd(dir_stats)
+# In order to make a side by side bar chart for Gauge and GMET series, the data.frame needs to be reshaped:
+df_long = melt(catg_Avgs) 
+Catgcl_Bar = ggplot(data = df_long, aes(x = obs.interval, y = value, fill = variable)) + 
+    geom_col(position="dodge") + scale_fill_manual(name = "pcp series:", labels=c("Gauge","GMET"), values=c("darkblue", "red")) + 
+    theme(legend.position="bottom") + geom_text(aes(label=round(value,1)), position=position_dodge(width=0.9), vjust=-0.25) +
+    labs(title="Evaluation of GMET performance in different precipitation categories (mm/day)", x="Precipitation Categories", 
+         y="Average precipitation at each category (mm/day)")
+print(Catgcl_Bar) 
+dev.copy(pdf,'Categorical_Bar_Chart.pdf')
+dev.off()
+
+##############################################
+# GMET categorical Reliability Index
+##############################################
+gmet.relb = data.frame(gmet.interval = NA, gmet.count = NA, obs.count = NA, Rel.Index = NA)
+for (i in 1:length(levels(catg.pairs$gmet.cut)))
+{
+    gmet.relb[i,1] = levels(catg.pairs$gmet.cut)[i]
+    sample = which(catg.pairs[,8] == levels(catg.pairs$gmet.cut)[i])
+    gmet.relb[i,2] = length(sample)
+    sample_2 = which(catg.pairs[,8] == levels(catg.pairs$gmet.cut)[i] & catg.pairs[,7] == levels(catg.pairs$gmet.cut)[i])
+    gmet.relb[i,3] = length(sample_2)
+    gmet.relb[i,4] = gmet.relb[i,3] / gmet.relb[i,2]
+}
+
+##############################################
+setwd(dir_cat)
+save(catg.pairs, catg_Avgs, gmet.relb, file = "Daily_Categorical_Eval.RData")
+
+write.csv(catg_Avgs, file = "catg_Avgs.csv")
+write.csv(gmet.relb, file = "gmet_relb.csv")
+
+```
+
+Lets see what is the result of our categorical evaluations:  
+```{r echo=FALSE}
+setwd(dir_stats)
+load("scatter_plot_Data_Daily.RData")
+breaks = c(0, 0.01, 1, 5, 10, 20, 50, 100, 700) # The first interval [0, 0.01) is defined to seperate zero pcp from others
+obs.cut = cut(allpairs_D$ga_pcp, breaks, right = FALSE)
+gmet.cut = cut(allpairs_D$gmet_pcp, breaks, right = FALSE)
+catg.pairs = cbind(allpairs_D, obs.cut, gmet.cut)
+
+catg_Avgs = aggregate(catg.pairs[,5:6], by=list(catg.pairs$obs.cut), FUN=mean, na.rm=TRUE)
+colnames(catg_Avgs) = c("obs.interval", "obs.Avg", "gmet.Avg")
+
+# Table for the categorical evaluations
+catg_Avgs_table = cbind(Intervals = catg_Avgs$obs.interval , round(catg_Avgs[,2:3],2))
+
+# this table will be shown in R Markdown when converting to an HTML file
+kable(catg_Avgs_table,format = "html", caption = "Gauge and GMET average precipitations at different categories (mm/day)")%>%
+    kable_styling(bootstrap_options = "striped", full_width = T)
+
+```
+
+and here is the graph we produced using the above table:  
+![](C:/Users/SEI_user/Documents/Bolivia/Calculation/Integrating all codes/Outputs/Stats/Categorical_Bar_Chart.png)
+
+# Section 14: Inside Pixel Gauge Uncertainty (Daily and Monthly)
+Purpose of this code is to calculate the uncertainty inside basin. In order to do that, all statistical error measures are calculated for the gauge stations existing in the same pixels. The value of these errors can be considerd as a measure for the inherent uncertainty that already exist within the observed pcp values inside each pixel. The approach of this code, is to firstly find the pixels with more than one gauge inside them. Then, we will start from the first record all the way trough the final one and at each record/gauge, we want to calculate all statistical measures with the time series of the next gauge station(s) in that pixel. For example, say we have 3 gauges at pixel 1. So we have three records in the pi_ga data.frame regarding all three gauges of this pixel. we start from the first gauge/record and will calculate the statistical measures between the 1st & 2nd gauges then the 1st and 3rd gauges. Afterwards, we move to the next record/gauge regarding this pixel which corresponds to the 2nd gauge. Here we just need to calculate the statistical measures between 2nd and 3rd gauges. Finally, for the 3rd record/gauge, we don't need to calculate any statistical measures because all are calculated before. So in this way we will calculate the statistical measures for all pairwise gauge stations within the pixels that are holding more than one gauge. At the end, we will calculate the min-avg-max values of all calculated statistical measures which are representing for the uncertainty that inherently exist inside the basin.  
+
+```{r eval=FALSE}
+    inpixel_unc = function(Total_Obs,pi_ga){
+    inpxl_stat = data.frame(Ga_1=NA, Ga_2=NA, Pixel=NA, Corel=NA, MBE=NA, RMSE=NA, CVRMSE=NA, MAE=NA, MSD=NA, MSDs=NA, MSDr=NA) # in_basin_stat
+    
+    pi_ga = cbind(pi_ga[,1:9], NA, pi_ga[,10])
+    colnames(pi_ga)[10:11] = c("No_G_in_Pi", "Dist")
+    pi_ga[,10] = lapply(pi_ga[,9], FUN = length)
+    
+    sh = 0 # just a counter
+    LN = which(pi_ga[,10] > 1) # Line Number of pixels with more than one gauge in it
+    for (i in 1:length(LN))
+    {
+        CN = which(colnames(Total_Obs) == pi_ga[LN[i],1]) # Intended Column Name in Total_Obs dataframe
+        x1 = Total_Obs[,CN]
+        
+        n1 = pi_ga[[LN[i] , 10]] # total number of gauges in that pixel
+        n2 = which(pi_ga[[LN[i] , 9]] == LN[i]) # position of the current gauge (pi_ga[LN[i],1]) in the vector of column 9. I want to write a loop 
+        # from n2 to n1 and calculate all statistical measures for each pair of gauge dataset. 
+        if (n2 != n1)
+        {
+            vec = pi_ga[[LN[i] , 9]]
+            for (j in (n2+1):n1)
+            {
+                sh = sh + 1
+                CN = which(colnames(Total_Obs) == pi_ga[vec[j],1]) # Intended Column Name in Total_Obs dataframe
+                x2 = Total_Obs[,CN]
+                
+                #########################
+                # Correlation Coeficient
+                #########################
+                Corel = cor(x1,x2, use = "na.or.complete")
+                
+                #########################
+                # Mean Bias Error (MBE)
+                #########################
+                er = x1 - x2
+                bias = sum(er, na.rm = TRUE)
+                MBE = (bias / sum(x1, na.rm = TRUE)) * 100
+                
+                #########################
+                # Root Mean Square (RMSE)
+                #########################
+                ser = (x1 - x2)^2 # Square Error
+                suser = sum(ser, na.rm = TRUE) # Sum Square Error
+                N = length(ser[!is.na(ser)]) # Number of dates ignoring NA values
+                RMSE = sqrt(suser / N)
+                
+                #########################
+                # CV-RMSE
+                #########################
+                obs_avg = mean(x1, na.rm = TRUE)
+                CVRMSE = RMSE / obs_avg
+                
+                #########################
+                # Mean Absolute Error (MAE)
+                #########################
+                aer = abs(x1 - x2) # absolute error
+                Total_aer = sum(aer, na.rm = TRUE)
+                N = length(aer[!is.na(aer)])
+                MAE = Total_aer / N
+                
+                #inpxl_stat = rbind(inpxl_stat, NA)
+                inpxl_stat[sh, 1] = pi_ga[LN[i],1] # Gauge 1
+                inpxl_stat[sh, 2] = pi_ga[vec[j],1] # Gauge 2
+                inpxl_stat[sh, 3] = pi_ga[LN[i],8] # Pixel name
+                inpxl_stat[sh, 4] = Corel
+                inpxl_stat[sh, 5] = MBE
+                inpxl_stat[sh, 6] = RMSE
+                inpxl_stat[sh, 7] = CVRMSE
+                inpxl_stat[sh, 8] = MAE
+                
+                #########################
+                # Systematic/Random Error
+                #########################
+                if (sum(is.na(x1-x2)) == length(x1)) {
+                    # it means these two datasets don't have any single record in common, 
+                    # so linear regression model will fail and stop the code
+                    inpxl_stat[sh, 9] = NA
+                    inpxl_stat[sh, 10] = NA
+                    inpxl_stat[sh, 11] = NA
+                } else {
+                    Data.mod1 = lm(x2 ~ x1)
+                    a = Data.mod1$coefficients[[1]]
+                    b = Data.mod1$coefficients[[2]]
+                    x3 = b * x1 + a
+                    inpxl_stat[sh, 9] = sum((x2 - x1) ^ 2 , na.rm = TRUE) / length(which(is.na(x1-x2) == FALSE)) # MSD
+                    inpxl_stat[sh, 10] = sum((x3 - x1) ^ 2 , na.rm = TRUE) / length(which(is.na(x1-x3) == FALSE)) # MSDs ==> Systematic error component
+                    inpxl_stat[sh, 11] = sum((x2 - x3) ^ 2 , na.rm = TRUE) / length(which(is.na(x3-x2) == FALSE)) # MSDr ==> Random error component
+                }
+            }
+        }
+    }
+    return(inpxl_stat)
+}
+
+Dtype = menu(c("Daily" , "Monthly"), graphics = TRUE, title = "How do you want the Unc_inPixel?")
+
+if (Dtype == 1) {
+    setwd(dir_out)
+    load("Reference Dataset.RData")
+    load("Pi_Ga_Dist.RData")
+    
+    # Call the function
+    inpxl_stat = inpixel_unc(Total_Obs,pi_ga)
+    
+    setwd(dir_unc)
+    write.csv(inpxl_stat, file = "In_Pixel_Statistical_Measures.csv")
+    save(inpxl_stat, file = "In_Pixel_Statistical_Measures.RData")
+    
+    # summerize the data and make Table:
+    Avg_inpxl = colMeans(inpxl_stat[,4:8], na.rm = TRUE)
+    Min_inpxl = apply(inpxl_stat[,4:8],2,min, na.rm = TRUE)
+    Max_inpxl = apply(inpxl_stat[,4:8],2,max, na.rm = TRUE)
+    Tbl_stD_inpxl = data.frame(Min = round(Min_inpxl,2), Avg = round(Avg_inpxl,2), Max = round(Max_inpxl,2), 
+                               row.names = colnames(inpxl_stat[,4:8]))# Table_Stats_Daily: Tbl_stD
+    
+    # read the GMET statistical results to make a comparison table at the end  
+    setwd(dir_stats)
+    load(file = "Statistical_Measures_Daily.RData")
+    Avg = colMeans(stats)
+    Min = apply(stats,2,min)
+    Max = apply(stats,2,max)
+    Tbl_stD = data.frame(Min = round(Min,2), Avg = round(Avg,2), Max = round(Max,2), row.names = colnames(stats))# Table_Stats_Daily: Tbl_stD
+    
+    # this table will be shown in R Markdown when converting to an HTML file
+    kable(cbind(Tbl_stD, Tbl_stD_inpxl), format = "html", 
+          caption = "Comparing the inherent uncertainty inside pixels with the GMET performance - Daily scale") %>%
+        kable_styling(bootstrap_options = "striped", full_width = F) %>%
+        add_header_above(c(" " = 1, "GMET Performance" = 3, "Uncertainty in Pixels" = 3))
+    
+} else if (Dtype == 2) {
+    setwd(dir_out)
+    load("Reference Dataset_Monthly.RData")
+    load("Pi_Ga_Dist.RData")
+    
+    # Call the function
+    inpxl_stat = inpixel_unc(Total_Obs = Total_Obs_M , pi_ga)
+    
+    setwd(dir_unc)
+    write.csv(inpxl_stat, file = "In_Pixel_Statistical_Measures_Monthly.csv")
+    save(inpxl_stat, file = "In_Pixel_Statistical_Measures_Monthly.RData")
+    
+    # summerize the data and make Table:
+    Avg_inpxl = colMeans(inpxl_stat[,4:8], na.rm = TRUE)
+    Min_inpxl = apply(inpxl_stat[,4:8],2,min, na.rm = TRUE)
+    Max_inpxl = apply(inpxl_stat[,4:8],2,max, na.rm = TRUE)
+    Tbl_stD_inpxl = data.frame(Min = round(Min_inpxl,2), Avg = round(Avg_inpxl,2), Max = round(Max_inpxl,2), 
+                               row.names = colnames(inpxl_stat[,4:8]))# Table_Stats_Daily: Tbl_stD
+    
+    # read the GMET statistical results to make a comparison table at the end  
+    setwd(dir_stats)
+    load(file = "Statistical_Measures_Monthly.RData")
+    Avg = colMeans(stats)
+    Min = apply(stats,2,min)
+    Max = apply(stats,2,max)
+    Tbl_stD = data.frame(Min = round(Min,2), Avg = round(Avg,2), Max = round(Max,2), row.names = colnames(stats))# Table_Stats_Daily: Tbl_stD
+    
+    # this table will be shown in R Markdown when converting to an HTML file
+    kable(cbind(Tbl_stD, Tbl_stD_inpxl), format = "html", 
+          caption = "Comparing the inherent uncertainty inside pixels with the GMET performance - Monthly scale") %>%
+        kable_styling(bootstrap_options = "striped", full_width = F) %>%
+        add_header_above(c(" " = 1, "GMET Performance" = 3, "Uncertainty in Pixels" = 3))
+    
+} else {
+    cat('Please select a valid statistical type and re-run the code')
+}
+
+```
+
+Lets compare the inside-pixels uncertainties with the statistical measures of GMET model over Bolivia, at daily scale:  
+```{r echo=FALSE}
+    setwd(dir_unc)
+    load(file = "In_Pixel_Statistical_Measures.RData")
+    
+    # summerize the data and make Table:
+    Avg_inpxl = colMeans(inpxl_stat[,4:8], na.rm = TRUE)
+    Min_inpxl = apply(inpxl_stat[,4:8],2,min, na.rm = TRUE)
+    Max_inpxl = apply(inpxl_stat[,4:8],2,max, na.rm = TRUE)
+    Tbl_stD_inpxl = data.frame(Min = round(Min_inpxl,2), Avg = round(Avg_inpxl,2), Max = round(Max_inpxl,2), 
+                               row.names = colnames(inpxl_stat[,4:8]))# Table_Stats_Daily: Tbl_stD
+    
+    # read the GMET statistical results to make a comparison table at the end  
+    setwd(dir_stats)
+    load(file = "Statistical_Measures_Daily.RData")
+    Avg = colMeans(stats)
+    Min = apply(stats,2,min)
+    Max = apply(stats,2,max)
+    Tbl_stD = data.frame(Min = round(Min,2), Avg = round(Avg,2), Max = round(Max,2), row.names = colnames(stats))# Table_Stats_Daily: Tbl_stD
+    
+    # this table will be shown in R Markdown when converting to an HTML file
+    kable(cbind(Tbl_stD, Tbl_stD_inpxl), format = "html", 
+          caption = "Comparing the inherent uncertainty inside pixels with the GMET performance - Daily scale") %>%
+        kable_styling(bootstrap_options = "striped", full_width = F) %>%
+        add_header_above(c(" " = 1, "GMET Performance" = 3, "Uncertainty in Pixels" = 3))
+```
+
+Finally here is the comparison of the inside-pixels uncertainties with the statistical measures of GMET model over Bolivia, at monthly scale:  
+```{r echo=FALSE}
+    setwd(dir_unc)
+    save(inpxl_stat, file = "In_Pixel_Statistical_Measures_Monthly.RData")
+    
+    # summerize the data and make Table:
+    Avg_inpxl = colMeans(inpxl_stat[,4:8], na.rm = TRUE)
+    Min_inpxl = apply(inpxl_stat[,4:8],2,min, na.rm = TRUE)
+    Max_inpxl = apply(inpxl_stat[,4:8],2,max, na.rm = TRUE)
+    Tbl_stD_inpxl = data.frame(Min = round(Min_inpxl,2), Avg = round(Avg_inpxl,2), Max = round(Max_inpxl,2), 
+                               row.names = colnames(inpxl_stat[,4:8]))# Table_Stats_Daily: Tbl_stD
+    
+    # read the GMET statistical results to make a comparison table at the end  
+    setwd(dir_stats)
+    load(file = "Statistical_Measures_Monthly.RData")
+    Avg = colMeans(stats)
+    Min = apply(stats,2,min)
+    Max = apply(stats,2,max)
+    Tbl_stD = data.frame(Min = round(Min,2), Avg = round(Avg,2), Max = round(Max,2), row.names = colnames(stats))# Table_Stats_Daily: Tbl_stD
+    
+    # this table will be shown in R Markdown when converting to an HTML file
+    kable(cbind(Tbl_stD, Tbl_stD_inpxl), format = "html", 
+          caption = "Comparing the inherent uncertainty inside pixels with the GMET performance - Monthly scale") %>%
+        kable_styling(bootstrap_options = "striped", full_width = F) %>%
+        add_header_above(c(" " = 1, "GMET Performance" = 3, "Uncertainty in Pixels" = 3))
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
