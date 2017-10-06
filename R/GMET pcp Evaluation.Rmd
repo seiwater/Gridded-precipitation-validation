@@ -21,19 +21,19 @@ output:
 make needed adjustments and then excute these lines:
 ```{r}
 rm(list=ls()) # removes variables from environment
-dir_main <- "C:/Users/SEI_user/Documents/Bolivia/Calculation/Integrating all codes" # set your main directory
+dir_main <- "https://github.com/seiwater/Gridded-precipitation-validation" # set your main directory
 dir_GMET <- "Z:/Data/NCAR_GMET/GMET_grids/GMET_daily" # set the GMET.nc (netCDF large files) directory
-dir_in <- "C:/Users/SEI_user/Documents/Bolivia/Calculation/Integrating all codes/Inputs" # set the input directory
+dir_in <- "https://github.com/seiwater/Gridded-precipitation-validation" # set the input directory
 ```
 
 Now we have set our main, GMET, and our input directory. So, it is time to put some data files into the input directory. Lets move on by the following steps: 
 
-* Copy and paste the "Coordinates_FileXY.csv" file, into your input directory. You can find it [here](https://github.com/seiwater/Gridded-precipitation-validation).  
-* Copy and paste the "pcp txt files" folder into your input directory. You can find it [here](https://github.com/seiwater/Gridded-precipitation-validation)  
+* Copy and paste the "Coordinates_FileXY.csv" file, into your input directory. You can find it [here](https://github.com/seiwater/Gridded-precipitation-validation/tree/master/Inputs).  
+* Copy and paste the "pcp txt files" folder into your input directory. You can find it [here](https://github.com/seiwater/Gridded-precipitation-validation/tree/master/Inputs)  
 
 *Great!*  
 by executing the following lines, R will organize some sub-folders in your main directory for your convenience!  
-```{r}
+```{r eval=FALSE}
 dir.create(paste(dir_main,"/Outputs", sep = ""), showWarnings = FALSE) # 'output' folder is created under the dir_main directory
 dir_out <- paste(dir_main,"/Outputs", sep = "") # set output directory
 dir.create(paste(dir_out,"/Stats", sep = ""), showWarnings = FALSE) # 'Stats' folder is created under the dir_out directory
@@ -125,6 +125,7 @@ text(-69,-23,"Chile",cex = 0.8)
 text(-64,-24,"Argentina",cex = 0.8)
 points(Pixel_Ga$LonG,Pixel_Ga$LatG,col=4,pch=16,cex = 0.5)
 ```
+![](https://github.com/seiwater/Gridded-precipitation-validation/blob/master/Images/Map.png)
 
 # Section 2: Preparing the GMET time series
 In this section, by having the corresponding pixel dimentions of the available gauge stations, we want to extract the total GMET time series and put them in a matrix. We will do the same for gauge stations and will call that the reference data set.  
