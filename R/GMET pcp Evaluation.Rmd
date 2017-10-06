@@ -859,7 +859,7 @@ if (stats_type == 1) { # Daily
 Now lets see some of the statistical results. We start by taking a look at the daily statistical measures.  
 ```{r}
     setwd(dir_stats)
-    load("https://github.com/seiwater/Gridded-precipitation-validation/blob/master/Outputs/Stats/Statistical_Measures_Daily.RData")
+    load(file = "Statistical_Measures_Daily.RData")
     # summerize the data and make Table:
     Avg = colMeans(stats)
     Min = apply(stats,2,min)
@@ -892,31 +892,31 @@ and the monthly statistical measures:
 
 > Seasonal daily Mean Bias Error:  
 
-![](C:/Users/SEI_user/Documents/Bolivia/Calculation/Integrating all codes/Outputs/Stats/Daily_boxp_MBE.png)  
+![](https://github.com/seiwater/Gridded-precipitation-validation/blob/master/Images/Daily_boxp_MBE.png)  
 
 > Seasonal daily CV-RMSE:  
 
-![](C:/Users/SEI_user/Documents/Bolivia/Calculation/Integrating all codes/Outputs/Stats/Daily_boxp_CVRMSE.png)  
+![](https://github.com/seiwater/Gridded-precipitation-validation/blob/master/Images/Daily_boxp_CVRMSE.png)  
 
 > Seasonal daily Mean Absolute Error:  
 
-![](C:/Users/SEI_user/Documents/Bolivia/Calculation/Integrating all codes/Outputs/Stats/Daily_boxp_MAE.png)  
+![](https://github.com/seiwater/Gridded-precipitation-validation/blob/master/Images/Daily_boxp_MAE.png)  
 
 > Seasonal monthly Correlation Coeficient:  
 
-![](C:/Users/SEI_user/Documents/Bolivia/Calculation/Integrating all codes/Outputs/Stats/Monthly_boxp_Corel.png)  
+![](https://github.com/seiwater/Gridded-precipitation-validation/blob/master/Images/Monthly_boxp_Corel.png)  
 
 > Seasonal monthly Mean Bias Error:  
 
-![](C:/Users/SEI_user/Documents/Bolivia/Calculation/Integrating all codes/Outputs/Stats/Monthly_boxp_MBE.png)  
+![](https://github.com/seiwater/Gridded-precipitation-validation/blob/master/Images/Monthly_boxp_MBE.png)  
 
 > Seasonal monthly CV-RMSE:  
 
-![](C:/Users/SEI_user/Documents/Bolivia/Calculation/Integrating all codes/Outputs/Stats/Monthly_boxp_CVRMSE.png)  
+![](https://github.com/seiwater/Gridded-precipitation-validation/blob/master/Images/Monthly_boxp_CVRMSE.png)  
 
 > Seasonal monthly Mean Absolute Error:  
 
-![](C:/Users/SEI_user/Documents/Bolivia/Calculation/Integrating all codes/Outputs/Stats/Monthly_boxp_MAE.png)  
+![](https://github.com/seiwater/Gridded-precipitation-validation/blob/master/Images/Monthly_boxp_MAE.png)  
 
 # Section 12: Systematic and Random Error (Daily, Monthly, Seasonal)  
 Purpose of this script is to calculate the systematic and random error components of the estimation model. In order to do that, we should initially perform a linear regression over the GMET-Gauge data and then based on the Sys-Rand formula we can calculate the systematic and random error components.  
@@ -1105,19 +1105,19 @@ if (stats_type == 1) { # Daily
 
 > Daily systematic and random error portions:  
 
-![](C:/Users/SEI_user/Documents/Bolivia/Calculation/Integrating all codes/Outputs/Stats/Pie_sysrnd_Daily.png)  
+![](https://github.com/seiwater/Gridded-precipitation-validation/blob/master/Images/Pie_sysrnd_Daily.png)  
 
 > Monthly systematic and random error portions:  
 
-![](C:/Users/SEI_user/Documents/Bolivia/Calculation/Integrating all codes/Outputs/Stats/Pie_sysrnd_Monthly.png)  
+![](https://github.com/seiwater/Gridded-precipitation-validation/blob/master/Images/Pie_sysrnd_Monthly.png)  
 
 > Seasonal daily systematic and random error portions:  
 
-![](C:/Users/SEI_user/Documents/Bolivia/Calculation/Integrating all codes/Outputs/Stats/Pie_Seasonal_sysrnd_Daily.png)  
+![](https://github.com/seiwater/Gridded-precipitation-validation/blob/master/Images/Pie_Seasonal_sysrnd_Daily.png)  
 
 > Seasonal monthly systematic and random error portions:  
 
-![](C:/Users/SEI_user/Documents/Bolivia/Calculation/Integrating all codes/Outputs/Stats/Pie_Seasonal_sysrnd_Monthly.png)  
+![](https://github.com/seiwater/Gridded-precipitation-validation/blob/master/Images/Pie_Seasonal_sysrnd_Monthly.png)  
 
 # Section 13: Categorical Evaluations
 Purpose of this script is to do the categorical analysis for the GMET Vs Gauge observation rainfals. Firstly, by testing different intervals for categories, the best interval values for the categories and for classification of observation rainfals are defined. Then, frequency distribution of GMET and Obs. are calculated at each category. Afterwards, the index of Reliability on GMET estimations is also calculated at different categories.  
@@ -1219,7 +1219,7 @@ kable(catg_Avgs_table,format = "html", caption = "Gauge and GMET average precipi
 ```
 
 and here is the graph we produced using the above table:  
-![](C:/Users/SEI_user/Documents/Bolivia/Calculation/Integrating all codes/Outputs/Stats/Categorical_Bar_Chart.png)
+![](https://github.com/seiwater/Gridded-precipitation-validation/blob/master/Images/Categorical_Bar_Chart.png)
 
 # Section 14: Inside Pixel Gauge Uncertainty (Daily and Monthly)
 Purpose of this code is to calculate the uncertainty inside basin. In order to do that, all statistical error measures are calculated for the gauge stations existing in the same pixels. The value of these errors can be considerd as a measure for the inherent uncertainty that already exist within the observed pcp values inside each pixel. The approach of this code, is to firstly find the pixels with more than one gauge inside them. Then, we will start from the first record all the way trough the final one and at each record/gauge, we want to calculate all statistical measures with the time series of the next gauge station(s) in that pixel. For example, say we have 3 gauges at pixel 1. So we have three records in the pi_ga data.frame regarding all three gauges of this pixel. we start from the first gauge/record and will calculate the statistical measures between the 1st & 2nd gauges then the 1st and 3rd gauges. Afterwards, we move to the next record/gauge regarding this pixel which corresponds to the 2nd gauge. Here we just need to calculate the statistical measures between 2nd and 3rd gauges. Finally, for the 3rd record/gauge, we don't need to calculate any statistical measures because all are calculated before. So in this way we will calculate the statistical measures for all pairwise gauge stations within the pixels that are holding more than one gauge. At the end, we will calculate the min-avg-max values of all calculated statistical measures which are representing for the uncertainty that inherently exist inside the basin.  
@@ -1446,21 +1446,5 @@ Finally here is the comparison of the inside-pixels uncertainties with the stati
         kable_styling(bootstrap_options = "striped", full_width = F) %>%
         add_header_above(c(" " = 1, "GMET Performance" = 3, "Uncertainty in Pixels" = 3))
 ```
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
