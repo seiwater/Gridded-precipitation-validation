@@ -608,8 +608,8 @@ if (pairtype == 1) { # Daily pairs
 ![](C:/Users/SEI_user/Documents/Bolivia/Calculation/Integrating all codes/Outputs/Stats/ScatterPlot_M.png)
   
 # Section 11: Statistical Analysis (Daily, Monthly, Seasonal)
-El enfoque de validaci髇 de la grilla se basa en la evaluaci髇 del desempe駉 del modelo sobre el territorio de Bolivia, usando un enfoque estad韘tico y de descomposici髇 del error a diferentes escalas de tiempo diario, mensual y anual y para diferentes estaciones.  
-Para la validaci髇 estad韘tica se usaron las m閠ricas de coeficiente de correlaci髇 (CC), error medio del sesgo (MBE), error de la ra韟 cuadrada (RMSE), coeficiente de variaci髇 del RMSE (CV-RMSE) y error medio absoluto (MAE). Therefore, the purpose of the following chunk is to calculate statistical measures over the daily dataset.
+El enfoque de validaci贸n de la grilla se basa en la evaluaci贸n del desempe帽o del modelo sobre el territorio de Bolivia, usando un enfoque estad铆stico y de descomposici贸n del error a diferentes escalas de tiempo diario, mensual y anual y para diferentes estaciones.  
+Para la validaci贸n estad铆stica se usaron las m茅tricas de coeficiente de correlaci贸n (CC), error medio del sesgo (MBE), error de la ra铆z cuadrada (RMSE), coeficiente de variaci贸n del RMSE (CV-RMSE) y error medio absoluto (MAE). Therefore, the purpose of the following chunk is to calculate statistical measures over the daily dataset.
 ```{r eval=FALSE}
 stats_F = function(AllD,rc,gc) {
     Corel = matrix(NA, nrow = length(AllD[,1]), ncol = 1)
@@ -891,7 +891,7 @@ and the monthly statistical measures:
 
 > Seasonal daily Correlation Coeficient:  
 
-![](C:/Users/SEI_user/Documents/Bolivia/Calculation/Integrating all codes/Outputs/Stats/Daily_boxp_Corel.png)  
+![](https://github.com/seiwater/Gridded-precipitation-validation/blob/master/Images/Daily_boxp_Corel.png)  
 
 > Seasonal daily Mean Bias Error:  
 
