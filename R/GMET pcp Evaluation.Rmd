@@ -21,9 +21,9 @@ output:
 make needed adjustments and then excute these lines:
 ```{r}
 rm(list=ls()) # removes variables from environment
-dir_main <- "https://github.com/seiwater/Gridded-precipitation-validation" # set your main directory
+dir_main <- "https://github.com/seiwater/Gridded-precipitation-validation" # set the main directory in your computer
 dir_GMET <- "Z:/Data/NCAR_GMET/GMET_grids/GMET_daily" # set the GMET.nc (netCDF large files) directory
-dir_in <- "https://github.com/seiwater/Gridded-precipitation-validation" # set the input directory
+dir_in <- "https://github.com/seiwater/Gridded-precipitation-validation" # set the input directory in your computer
 ```
 
 Now we have set our main, GMET, and our input directory. So, it is time to put some data files into the input directory. Lets move on by the following steps: 
@@ -488,15 +488,13 @@ Annual_Graph = ggplot(Annual_obs_GMET, aes(x = Year, y = obs_Avg)) + coord_carte
     theme(legend.position="bottom") + geom_area(fill=alpha('slateblue',0.2)) +
     labs(title="Annual GMET Precipitation Vs Observation values", x="Year", y="Mean Annual Precipitation (mm/year)")
 print(Annual_Graph)
-```
-  
-Saving the "Annual_Graph":
-```{r eval=FALSE}
+# Saving the "Annual_Graph":
 # the following lines will save the graph that is already being seen in the 'Plots' tab of the RStudio
 dev.copy(pdf,'Annual_Graph.pdf')
 dev.off()
 ```
-
+![](https://github.com/seiwater/Gridded-precipitation-validation/blob/master/Images/Annual_Graph.png)  
+  
 # Section 9: Monthly average time series over all the study area (Bolivia)
 Purpose of this code is to calculate the monthly avg values over all grids. So for each month I only want one single raifall value either for obs or GMET which represents for the whole pixels. so average is taken over the pixels not time.  
 
@@ -536,14 +534,12 @@ Monthly_Graph = ggplot(monthly_obs_GMET, aes(x = seq(1:length(monthly_obs_GMET[,
     theme(legend.position="bottom") + geom_area(fill=alpha('slateblue',0.2)) +
     labs(title="Monthly GMET Precipitation Vs Observation values", x="Month", y="Mean monthly Precipitation (mm/month)")
 print(Monthly_Graph)
-```
-  
-Saving the "Annual_Graph":
-```{r eval=FALSE}
+#Saving the "Annual_Graph":
 # the following lines will save the graph that is already being seen in the 'Plots' tab of the RStudio
 dev.copy(pdf,'Monthly_Graph.pdf')
 dev.off()
 ```
+![](https://github.com/seiwater/Gridded-precipitation-validation/blob/master/Images/Monthly_Graph.png)  
 
 # Section 10: Scatter Plot 
 Purpose of this section is to make two time series, one for the GMET and the other for reference observations and plot them against each other.  
@@ -606,7 +602,7 @@ if (pairtype == 1) { # Daily pairs
 }
 
 ```
-![](C:/Users/SEI_user/Documents/Bolivia/Calculation/Integrating all codes/Outputs/Stats/ScatterPlot_M.png)
+![](https://github.com/seiwater/Gridded-precipitation-validation/blob/master/Images/ScatterPlot_M.png)
   
 # Section 11: Statistical Analysis (Daily, Monthly, Seasonal)
 El enfoque de validación de la grilla se basa en la evaluación del desempeño del modelo sobre el territorio de Bolivia, usando un enfoque estadístico y de descomposición del error a diferentes escalas de tiempo diario, mensual y anual y para diferentes estaciones.  
@@ -863,7 +859,7 @@ if (stats_type == 1) { # Daily
 Now lets see some of the statistical results. We start by taking a look at the daily statistical measures.  
 ```{r}
     setwd(dir_stats)
-    load(file = "Statistical_Measures_Daily.RData")
+    load(https://github.com/seiwater/Gridded-precipitation-validation/tree/master/Outputs/Stats, file = "Statistical_Measures_Daily.RData")
     # summerize the data and make Table:
     Avg = colMeans(stats)
     Min = apply(stats,2,min)
