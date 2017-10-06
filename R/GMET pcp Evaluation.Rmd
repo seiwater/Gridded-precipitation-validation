@@ -859,7 +859,7 @@ if (stats_type == 1) { # Daily
 Now lets see some of the statistical results. We start by taking a look at the daily statistical measures.  
 ```{r}
     setwd(dir_stats)
-    load("https://github.com/seiwater/Gridded-precipitation-validation/tree/master/Outputs/Stats", file = "Statistical_Measures_Daily.RData")
+    load("https://github.com/seiwater/Gridded-precipitation-validation/tree/master/Outputs/Stats/Statistical_Measures_Daily.RData")
     # summerize the data and make Table:
     Avg = colMeans(stats)
     Min = apply(stats,2,min)
