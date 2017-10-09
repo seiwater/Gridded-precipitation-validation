@@ -494,9 +494,10 @@ dev.copy(pdf,'Annual_Graph.pdf')
 dev.off()
 ```
 ![](https://github.com/seiwater/Gridded-precipitation-validation/blob/master/Images/Annual_Graph.png)  
-  
+This annual comparison shows that GMET is performing very well in capturing the annual changing manner of precipitation over Bolivia with a slight underestimation from 1993 untill 2004.  
+
 # Section 9: Monthly average time series over all the study area (Bolivia)
-Purpose of this code is to calculate the monthly avg values over all grids. So for each month I only want one single raifall value either for obs or GMET which represents for the whole pixels. so average is taken over the pixels not time.  
+Purpose of this section is to calculate the monthly avg values over all grids. So for each month I only want one single raifall value either for obs or GMET which represents for the whole pixels. so average is taken over the pixels not time.  
 
 ```{r}
 setwd(dir_out)
@@ -540,9 +541,10 @@ dev.copy(pdf,'Monthly_Graph.pdf')
 dev.off()
 ```
 ![](https://github.com/seiwater/Gridded-precipitation-validation/blob/master/Images/Monthly_Graph.png)  
-
+This graph also illustrates that GMET is doing well in reproducing the monthly variation of local observations.  
+  
 # Section 10: Scatter Plot 
-Purpose of this section is to make two time series, one for the GMET and the other for reference observations and plot them against each other.  
+If we consider each GMET estimation and its equivalent observed value as a pair of estimation-observation data, it is also useful to plot all data pairs in a scatter plot and evaluate the overall correlation of the model. This is the purpose of this section which means making two time series, one for the GMET and the other for reference observations and plot them against each other.  
 ```{r eval=FALSE}
 pairData = function(AllD){
     allpairs = NULL
@@ -603,10 +605,10 @@ if (pairtype == 1) { # Daily pairs
 
 ```
 ![](https://github.com/seiwater/Gridded-precipitation-validation/blob/master/Images/ScatterPlot_M.png)
+This monthly scatter plot is showing that the correlation coefficient of the total set of data is about 84% with a R2 value of 0.77. The fact that the trend line fitted to the GMET estimation values versus observed data is so close to the perfect agreement line (dashed line) indicates the level of accuracy in the GMET model and its algorithm.  
   
 # Section 11: Statistical Analysis (Daily, Monthly, Seasonal)
-El enfoque de validación de la grilla se basa en la evaluación del desempeño del modelo sobre el territorio de Bolivia, usando un enfoque estadístico y de descomposición del error a diferentes escalas de tiempo diario, mensual y anual y para diferentes estaciones.  
-Para la validación estadística se usaron las métricas de coeficiente de correlación (CC), error medio del sesgo (MBE), error de la raíz cuadrada (RMSE), coeficiente de variación del RMSE (CV-RMSE) y error medio absoluto (MAE). Therefore, the purpose of the following chunk is to calculate statistical measures over the daily dataset.
+For the statistical validation, we used the coefficients of correlation coefficient (CC), mean bias error (MBE), square root error (RMSE), RMSE coefficient of variation (CV-RMSE) and absolute mean error (MAE), to evaluate performance of GMET rainfall estimations over the study area. These evaluations can be calculated at daily, monthly scales and in seasonal or non-seasonal scenarios. Therefore, the purpose of the following chunk is to calculate all these measures for the GMET dataset.
 ```{r eval=FALSE}
 stats_F = function(AllD,rc,gc) {
     Corel = matrix(NA, nrow = length(AllD[,1]), ncol = 1)
@@ -870,8 +872,9 @@ Now lets see some of the statistical results. We start by taking a look at the d
     kable(Tbl_stD,format = "html", caption = "Table of Daily Statistical Measures") %>%
         kable_styling(bootstrap_options = "striped", full_width = F)
 ```
+In this table the MBE can be observed from -263 to 70%, with an average of -4.34%. The correlation coefficient is also changing from 0.12 to 0.95, with an average of 0.65 for the daily data set. The average correlation of 0.65 in daily scale shows the efficiency and good performance of GMET model in estimating the precipitation over Bolivia. MAE values are changing from  0.28 to maximum 11.00 with an average of 2.00 mm/day. This means that on average the GMET estimate has about 2 mm/day difference from observations.  
 
-and the monthly statistical measures:  
+Now, lets take a look on monthly statistical measures:  
 ```{r}
     setwd(dir_stats)
     load(file = "Statistical_Measures_Monthly.RData")
@@ -885,6 +888,7 @@ and the monthly statistical measures:
     kable(Tbl_stD,format = "html", caption = "Table of Monthly Statistical Measures")%>%
         kable_styling(bootstrap_options = "striped", full_width = F)
 ```
+Here in the monthly scale evaluations the bias is reduced to 4.66% which is a positive sign. Likewise, the correlation coefficient increased with respect to that of the daily table while its average value is approximately 0.90 for the whole region. The RMSE, CV-RMSE and MAE metrics have also decreased. In general, monthly statistical measures indicate a very good performance of GMET over the country of Bolivia, which proves that it is an appropriate rainfall product to be used in a hydrological model.  
 
 > Seasonal daily Correlation Coeficient:  
 
@@ -917,6 +921,8 @@ and the monthly statistical measures:
 > Seasonal monthly Mean Absolute Error:  
 
 ![](https://github.com/seiwater/Gridded-precipitation-validation/blob/master/Images/Monthly_boxp_MAE.png)  
+
+These graphs are showing the seasonal differences of statistical measures for daily and monthly time series. These figures show that while in most evaluation pixels, GMET estimations are highly correlated with observation rainfall time series, there are still some pixels in where their correlation coefficient are lower. This is especially observed during the dry season at which some of the observations even have negative correlation. This indicates that more attention should be given to GMET estimates in the dry season. You can have similar interpretations from other graphs and analyse these results.  
 
 # Section 12: Systematic and Random Error (Daily, Monthly, Seasonal)  
 Purpose of this script is to calculate the systematic and random error components of the estimation model. In order to do that, we should initially perform a linear regression over the GMET-Gauge data and then based on the Sys-Rand formula we can calculate the systematic and random error components.  
