@@ -925,7 +925,7 @@ Here in the monthly scale evaluations the bias is reduced to 4.66% which is a po
 These graphs are showing the seasonal differences of statistical measures for daily and monthly time series. These figures show that while in most evaluation pixels, GMET estimations are highly correlated with observation rainfall time series, there are still some pixels in where their correlation coefficient are lower. This is especially observed during the dry season at which some of the observations even have negative correlation. This indicates that more attention should be given to GMET estimates in the dry season. You can have similar interpretations from other graphs and analyse these results.  
 
 # Section 12: Systematic and Random Error (Daily, Monthly, Seasonal)  
-Purpose of this script is to calculate the systematic and random error components of the estimation model. In order to do that, we should initially perform a linear regression over the GMET-Gauge data and then based on the Sys-Rand formula we can calculate the systematic and random error components.  
+The mean-square difference (MSD) measure can describe the difference between observed and estimated rainfall rates, just as it makes it possible to calculate the division between the components of systematic and random errors. SO, the purpose of this chunk is to calculate the systematic and random error components of the estimation model. In order to do that, we should initially perform a linear regression over the GMET-Gauge data, calculate MSD error and then based on the Sys-Rand formula we can calculate the systematic and random error components.  
 ```{r eval=FALSE}
 sysrand_F = function(AllD,rc,gc) {
     sysrand = data.frame(Pi_Name = NA, MSD = NA, MSDs = NA, MSDr = NA)
@@ -1116,6 +1116,8 @@ if (stats_type == 1) { # Daily
 > Monthly systematic and random error portions:  
 
 ![](https://github.com/seiwater/Gridded-precipitation-validation/blob/master/Images/Pie_sysrnd_Monthly.png)  
+  
+These results indicate that around 46% and 33% (Daily and Monthly) of the associated errors with GMET estimations are caused by issues in the system of estimation and the rest is due the random errors. This actually means that the GMET algorithm is well adjusted (specially at monthly scale) so there is not a serious need for calibration of the main GMET algorithm and methodology. In other words, the majority of the estimation errors are caused by the natural uncertainties dealing with precipitation phenomena, which is hard to remove and also can possibly be originated from the imperfect observations in the local gauge stations and the issues of comparing a gridded product with point reference dataset.  
 
 > Seasonal daily systematic and random error portions:  
 
@@ -1226,6 +1228,8 @@ kable(catg_Avgs_table,format = "html", caption = "Gauge and GMET average precipi
 
 and here is the graph we produced using the above table:  
 ![](https://github.com/seiwater/Gridded-precipitation-validation/blob/master/Images/Categorical_Bar_Chart.png)
+  
+As it can be seen in this graph, GMET is able to capture the overall changing manner of observed precipitation at gauge stations. In other words, as the values of observations at different categories increase, their corresponding estimations by GMET also increase. However, the value of this increase especially at rainfall events heavier than 50 mm/day, is not precise enough to reach the observations. This means that GMET is doing well in the range of [0, 50] mm/day though it is underestimating the heavier rainfall events.  
 
 # Section 14: Inside Pixel Gauge Uncertainty (Daily and Monthly)
 Purpose of this code is to calculate the uncertainty inside basin. In order to do that, all statistical error measures are calculated for the gauge stations existing in the same pixels. The value of these errors can be considerd as a measure for the inherent uncertainty that already exist within the observed pcp values inside each pixel. The approach of this code, is to firstly find the pixels with more than one gauge inside them. Then, we will start from the first record all the way trough the final one and at each record/gauge, we want to calculate all statistical measures with the time series of the next gauge station(s) in that pixel. For example, say we have 3 gauges at pixel 1. So we have three records in the pi_ga data.frame regarding all three gauges of this pixel. we start from the first gauge/record and will calculate the statistical measures between the 1st & 2nd gauges then the 1st and 3rd gauges. Afterwards, we move to the next record/gauge regarding this pixel which corresponds to the 2nd gauge. Here we just need to calculate the statistical measures between 2nd and 3rd gauges. Finally, for the 3rd record/gauge, we don't need to calculate any statistical measures because all are calculated before. So in this way we will calculate the statistical measures for all pairwise gauge stations within the pixels that are holding more than one gauge. At the end, we will calculate the min-avg-max values of all calculated statistical measures which are representing for the uncertainty that inherently exist inside the basin.  
@@ -1452,5 +1456,7 @@ Finally here is the comparison of the inside-pixels uncertainties with the stati
         kable_styling(bootstrap_options = "striped", full_width = F) %>%
         add_header_above(c(" " = 1, "GMET Performance" = 3, "Uncertainty in Pixels" = 3))
 ```
+  
+in above tables, comparing the middle columns of statistical measures (Ave values) from GMET model against the inside pixel uncertainty values, indicates that there is not large room of improvement for the GMET model over Bolivia. In fact the differences and statistical differences between nearby and adjacent gauge stations within similar pixels are almost close to the error values that are calculated for GMET against the observed values. For example in monthly scale, the average correlation coefficient of the gauge stations that are fallen into similar pixels are 0.91 while this value for GMET versus the observations is 0.90. It means that GMET is performing with similar precision of the inside basin observations. In other words, if we add another gauge station in a new position in Bolivia, it may probably record similar values that GMET is estimating and their statistical performances will be similar. For monthly RMSE, the inside basin uncertainty is equal to 25.6 while GMET’s RMSE is equal to 36.43. This means that we should not expect GMET to reach a RMSE value of less than 25.6. That is also the case when looking at monthly MAE metric at which the inside basin uncertainty is equal to 15.62 while that of the GMET is equal to 23.38 mm per day. So it means that at best condition, GMET can reach to the precision of local gauge stations which is about 15.62 mm/day of monthly error value or (monthly rainfall difference) between estimations and observations.  
 
 
