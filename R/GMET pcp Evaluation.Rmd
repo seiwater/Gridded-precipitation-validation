@@ -1433,7 +1433,7 @@ Lets compare the inside-pixels uncertainties with the statistical measures of GM
 Finally here is the comparison of the inside-pixels uncertainties with the statistical measures of GMET model over Bolivia, at monthly scale:  
 ```{r echo=FALSE}
     setwd(dir_unc)
-    save(inpxl_stat, file = "In_Pixel_Statistical_Measures_Monthly.RData")
+    load(file = "In_Pixel_Statistical_Measures_Monthly.RData")
     
     # summerize the data and make Table:
     Avg_inpxl = colMeans(inpxl_stat[,4:8], na.rm = TRUE)
