@@ -138,6 +138,8 @@ load("Pixel_Ga_LatLon.RData") # Gauge station's information
 
 GMET_P <- list() 
 list_P <- list()
+
+setwd(dir_GMET)
 for (i in 1:length(ncname)) # currently we have just a single GMET.nc file so this loop is of length one! However if the GMET time series is devided into various '.nc' files due to their volume and storage issues, then this loop will work for all of them. 
 {
     ncf <- nc_open(ncname[i])
